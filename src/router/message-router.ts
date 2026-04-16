@@ -1,5 +1,5 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
-import { parseMessageWithOllama, type ParsedData } from '../ai/ollama'
+import { parseMessageWithClaude, type ParsedData } from '../ai/claude'
 import { handleHelp } from '../handlers/help'
 import { handleQuerySummary } from '../handlers/summary'
 import { handleSetBudget, handleSetIncome } from '../handlers/budget'
@@ -53,12 +53,12 @@ export async function routeMessage(
     return
   }
 
-  // Send to Ollama for AI parsing
-  console.log(`[Router] [${messageId}] No slash command — sending to Ollama for parsing`)
-  const parsed = await parseMessageWithOllama(text)
+  // Send to Claude for AI parsing
+  console.log(`[Router] [${messageId}] No slash command — sending to Claude for parsing`)
+  const parsed = await parseMessageWithClaude(text)
 
   if (!parsed) {
-    console.warn(`[Router] [${messageId}] Ollama returned null — could not parse message`)
+    console.warn(`[Router] [${messageId}] Claude returned null — could not parse message`)
     await sendTextReply(
       sock,
       remoteJid,
@@ -67,7 +67,7 @@ export async function routeMessage(
     return
   }
 
-  console.log(`[Router] [${messageId}] Ollama parsed — intent: ${parsed.intent}, amount: ${parsed.amount}, category: ${parsed.category}, description: "${parsed.description}", period: ${parsed.period}`)
+  console.log(`[Router] [${messageId}] Claude parsed — intent: ${parsed.intent}, amount: ${parsed.amount}, category: ${parsed.category}, description: "${parsed.description}", period: ${parsed.period}`)
 
   // Dispatch based on intent
   switch (parsed.intent) {

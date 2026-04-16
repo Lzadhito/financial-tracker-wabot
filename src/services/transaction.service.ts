@@ -1,7 +1,7 @@
 import { db } from '../db'
 import { transactions, users } from '../db/schema'
 import { eq, and, gte, lte, sql } from 'drizzle-orm'
-import type { ParsedData } from '../ai/ollama'
+import type { ParsedData } from '../ai/claude'
 
 export async function recordTransaction(data: {
   ledgerId: string

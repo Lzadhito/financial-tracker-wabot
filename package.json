@@ -12,6 +12,7 @@
     "build": "bun build src/index.ts --outdir dist"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.89.0",
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "drizzle-orm": "^0.45.2",

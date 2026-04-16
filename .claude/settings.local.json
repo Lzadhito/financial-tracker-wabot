@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(bun add *)",
-      "Bash(bun build *)"
+      "Bash(bun build *)",
+      "Skill(claude-api)",
+      "Bash(bunx tsc *)"
     ]
   }
 }

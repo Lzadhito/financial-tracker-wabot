@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { env } from '../env'
 import { getConnectionState, getQRCode } from '../whatsapp/client'
-import { checkOllamaStatus } from '../ai/ollama'
+import { checkClaudeStatus } from '../ai/claude'
 
 const app = new Hono()
 
@@ -115,7 +115,7 @@ app.get('/qr', (c) => {
 
 // AI status check
 app.get('/ai/status', async (c) => {
-  const status = await checkOllamaStatus()
+  const status = await checkClaudeStatus()
   return c.json(status)
 })
 
