@@ -52,7 +52,48 @@ export async function handleDeleteTransaction(
     await sendTextReply(
       sock,
       remoteJid,
-      'Usage: /delete <name> [<day> <month>] [HH:MM]\n\nExamples:\n• /delete beli kopi\n• /delete beli kopi 16 april 15:03\n• /delete makan siang hari ini',
+      'Usage: /delete <name> [<day> <month>] [HH:MM]\n\nExamples:\n• /delete beli kopi\n• /delete beli kopi 16 april 15:03\n• /delete makan siang hari ini\n• /delete beli kopi #2 (select by index)',
+      msg
+    )
+    return
+  }
+
+  // Check for index-based selection: /delete <name> #N
+  const indexMatch = args.join(' ').match(/^(.+?)\s+#(\d+)$/)
+  if (indexMatch) {
+    const name = indexMatch[1].trim()
+    const idx = parseInt(indexMatch[2], 10) - 1 // convert to 0-based
+
+    const allMatches = await findTransactionsByName(ledgerId, name)
+    if (allMatches.length === 0) {
+      await sendTextReply(sock, remoteJid, `No transaction found matching "${name}".`, msg)
+      return
+    }
+    if (idx < 0 || idx >= allMatches.length) {
+      await sendTextReply(
+        sock,
+        remoteJid,
+        `Invalid number. There ${allMatches.length === 1 ? 'is' : 'are'} ${allMatches.length} matching transaction${allMatches.length === 1 ? '' : 's'}.`,
+        msg
+      )
+      return
+    }
+
+    const txn = allMatches[idx]
+    const deleted = await softDeleteTransaction(txn.id, ledgerId)
+    if (!deleted) {
+      await sendTextReply(sock, remoteJid, 'Could not delete transaction. Please try again.', msg)
+      return
+    }
+
+    const typeEmoji = txn.transactionType === 'income' ? '📥' : '📤'
+    const desc = txn.description || txn.rawMessage
+    const dateStr = txn.createdAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+    const timeStr = txn.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+    await sendTextReply(
+      sock,
+      remoteJid,
+      `🗑️  *Transaction deleted*\n\n${typeEmoji} ${formatRupiah(txn.amount)} — ${desc}\nCategory: ${txn.category}\nDate: ${dateStr}, ${timeStr}`,
       msg
     )
     return
@@ -88,8 +129,8 @@ export async function handleDeleteTransaction(
     if (matches.length > 1) {
       const list = matches
         .map((t, i) => {
-          const date = t.createdAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
-          const time = t.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          const date = t.createdAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+          const time = t.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
           const desc = t.description || t.rawMessage
           return `${i + 1}. ${formatRupiah(t.amount)} — ${desc} (${date}, ${time})`
         })
@@ -98,7 +139,7 @@ export async function handleDeleteTransaction(
       await sendTextReply(
         sock,
         remoteJid,
-        `Found ${matches.length} matching transactions — please be more specific (add date/time):\n\n${list}`,
+        `Found ${matches.length} matching transactions:\n\n${list}\n\nUse /delete ${parsed.description} #N to delete a specific one.`,
         msg
       )
       return
@@ -119,8 +160,9 @@ export async function handleDeleteTransaction(
       day: 'numeric',
       month: 'long',
       year: 'numeric',
+      timeZone: 'UTC',
     })
-    const timeStr = txn.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+    const timeStr = txn.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
 
     await sendTextReply(
       sock,

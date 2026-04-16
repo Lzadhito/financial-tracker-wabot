@@ -46,7 +46,7 @@ export async function handleIncomeReport(
     replyText += `\n*Entries:*\n`
     const displayed = txns.slice(0, 10)
     for (const txn of displayed) {
-      const dateStr = txn.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      const dateStr = txn.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
       const desc = txn.description || txn.category
       replyText += `• ${dateStr} | ${txn.memberName} | ${formatRupiah(txn.amount)} — ${desc}\n`
     }

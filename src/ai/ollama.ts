@@ -106,7 +106,11 @@ const deleteQuerySchema = z.object({
 
 export type DeleteQuery = z.infer<typeof deleteQuerySchema>
 
-export async function parseDeleteQueryWithOllama(text: string, today: Date): Promise<DeleteQuery | null> {
+export async function parseDeleteQueryWithOllama(rawText: string, today: Date): Promise<DeleteQuery | null> {
+  // Normalize dot-separated times (e.g. "21.36") to colon format ("21:36")
+  // Only match HH.MM patterns that look like times (hour 0-23, minute 0-59)
+  const text = rawText.replace(/\b([01]?\d|2[0-3])\.([0-5]\d)\b/g, '$1:$2')
+
   const todayDay = today.getDate()
   const todayMonth = today.getMonth() + 1
   const todayYear = today.getFullYear()
@@ -127,15 +131,16 @@ Relative date words to resolve using today's date:
 - "kemarin", "yesterday", "tadi malam" (if before midnight) → day=${yesterdayDay}, month=${yesterdayMonth}
 - "tadi pagi", "tadi siang", "tadi sore", "tadi malam" → same as today unless clearly yesterday
 
-Time expressions:
-- "jam HH:MM", "pukul HH:MM", "HH:MM", "at HH:MM" → extract hour and minute
+Time expressions (accept both colon and dot as separator):
+- "jam HH:MM", "pukul HH:MM", "HH:MM", "HH.MM", "at HH:MM" → extract hour and minute
 - "jam HH" (no minutes) → hour=HH, minute=0
 - 12-hour: "3 sore"=15:00, "7 malam"=19:00, "8 pagi"=8:00
 
-Month names (Indonesian and English):
-januari/january/jan=1, februari/february/feb=2, maret/march/mar=3, april/apr=4,
-mei/may=5, juni/june/jun=6, juli/july/jul=7, agustus/august/aug=8,
-september/sep/sept=9, oktober/october/okt/oct=10, november/nov=11, desember/december/des/dec=12
+Month names — accept full names, short names, Indonesian and English, any capitalisation:
+januari/january/jan=1, februari/february/feb=2, maret/march/mar=3,
+april/apr=4, mei/may=5, juni/june/jun=6, juli/july/jul=7,
+agustus/august/aug=8, september/sep/sept=9, oktober/october/okt/oct=10,
+november/nov=11, desember/december/des/dec=12
 
 Return ONLY a JSON object with these fields:
 - description: the transaction name/description (string, clean, no date/time parts)
@@ -156,6 +161,15 @@ Output: {"description":"makan siang","day":${yesterdayDay},"month":${yesterdayMo
 
 Input: "beli kopi 16 april 15:03"
 Output: {"description":"beli kopi","day":16,"month":4,"year":null,"hour":15,"minute":3}
+
+Input: "kopi (16 April 21.36)"
+Output: {"description":"kopi","day":16,"month":4,"year":null,"hour":21,"minute":36}
+
+Input: "kopi (16 Apr, 21.36)"
+Output: {"description":"kopi","day":16,"month":4,"year":null,"hour":21,"minute":36}
+
+Input: "makan siang 16 April"
+Output: {"description":"makan siang","day":16,"month":4,"year":null,"hour":null,"minute":null}
 
 Input: "makan siang 16 april"
 Output: {"description":"makan siang","day":16,"month":4,"year":null,"hour":null,"minute":null}

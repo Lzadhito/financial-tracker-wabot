@@ -55,8 +55,8 @@ export async function handleTransactionsList(
     for (const txn of displayed) {
       const shortId = txn.id.slice(0, 8)
       const isDeleted = txn.deletedAt !== null
-      const dateStr = txn.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      const timeStr = txn.createdAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      const dateStr = txn.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+      const timeStr = txn.createdAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
       const typeEmoji = TYPE_EMOJI[txn.transactionType] || '•'
       const catEmoji = CATEGORY_EMOJI[txn.category] || '📌'
       const desc = txn.description || txn.category

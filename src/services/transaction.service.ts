@@ -1,6 +1,6 @@
 import { db } from '../db'
 import { transactions, users } from '../db/schema'
-import { eq, and, gte, lte, lt, isNull } from 'drizzle-orm'
+import { eq, and, gte, lte, lt, isNull, sql } from 'drizzle-orm'
 import type { ParsedData } from '../ai/ollama'
 
 export async function recordTransaction(data: {
@@ -328,7 +328,7 @@ export async function findTransactionsByName(ledgerId: string, query: string) {
 export async function softDeleteTransaction(transactionId: string, ledgerId: string) {
   const [updated] = await db
     .update(transactions)
-    .set({ deletedAt: new Date() })
+    .set({ deletedAt: sql`now()` })
     .where(
       and(
         eq(transactions.id, transactionId),
