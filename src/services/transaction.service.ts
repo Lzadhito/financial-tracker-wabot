@@ -84,8 +84,7 @@ export async function getMonthTransactions(ledgerId: string) {
   return await db.query.transactions.findMany({
     where: and(
       eq(transactions.ledgerId, ledgerId),
-      gte(transactions.createdAt, monthAgo),
-      lte(transactions.createdAt, today)
+      gte(transactions.createdAt, monthAgo)
     ),
   })
 }
@@ -113,7 +112,7 @@ export async function getTransactionsByCategory(ledgerId: string, period: 'today
       txns = await getWeekTransactions(ledgerId)
       break
     case 'month':
-      txns = await getMonthTransactions(ledgerId)
+      txns = await getCurrentMonthTransactions(ledgerId)
       break
   }
 
@@ -139,7 +138,7 @@ export async function getTransactionsByMember(ledgerId: string, period: 'today' 
       txns = await getWeekTransactions(ledgerId)
       break
     case 'month':
-      txns = await getMonthTransactions(ledgerId)
+      txns = await getCurrentMonthTransactions(ledgerId)
       break
   }
 
@@ -175,7 +174,7 @@ export async function getTotalExpensesByPeriod(ledgerId: string, period: 'today'
       txns = await getWeekTransactions(ledgerId)
       break
     case 'month':
-      txns = await getMonthTransactions(ledgerId)
+      txns = await getCurrentMonthTransactions(ledgerId)
       break
   }
 
@@ -195,7 +194,7 @@ export async function getTotalIncomeByPeriod(ledgerId: string, period: 'today' |
       txns = await getWeekTransactions(ledgerId)
       break
     case 'month':
-      txns = await getMonthTransactions(ledgerId)
+      txns = await getCurrentMonthTransactions(ledgerId)
       break
   }
 
