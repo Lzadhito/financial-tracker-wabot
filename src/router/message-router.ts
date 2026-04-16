@@ -4,7 +4,10 @@ import { handleHelp } from '../handlers/help'
 import { handleQuerySummary } from '../handlers/summary'
 import { handleSetBudget, handleSetIncome } from '../handlers/budget'
 import { handleLogTransaction } from '../handlers/transaction'
+import { handleIncomeReport } from '../handlers/income-report'
+import { handleTransactionsList } from '../handlers/transactions-list'
 import { sendTextReply } from '../whatsapp/sender'
+import { parseDateFilter } from '../utils/date-filter'
 
 export interface SlashCommandResult {
   type: 'slash_command'
@@ -53,12 +56,12 @@ export async function routeMessage(
     return
   }
 
-  // Send to Ollama for AI parsing
-  console.log(`[Router] [${messageId}] No slash command — sending to Ollama for parsing`)
+  // Send to AI for parsing
+  console.log(`[Router] [${messageId}] No slash command — sending to AI for parsing`)
   const parsed = await parseMessageWithOllama(text)
 
   if (!parsed) {
-    console.warn(`[Router] [${messageId}] Ollama returned null — could not parse message`)
+    console.warn(`[Router] [${messageId}] AI returned null — could not parse message`)
     await sendTextReply(
       sock,
       remoteJid,
@@ -67,7 +70,7 @@ export async function routeMessage(
     return
   }
 
-  console.log(`[Router] [${messageId}] Ollama parsed — intent: ${parsed.intent}, amount: ${parsed.amount}, category: ${parsed.category}, description: "${parsed.description}", period: ${parsed.period}`)
+  console.log(`[Router] [${messageId}] AI parsed — intent: ${parsed.intent}, amount: ${parsed.amount}, category: ${parsed.category}, description: "${parsed.description}", period: ${parsed.period}`)
 
   // Dispatch based on intent
   switch (parsed.intent) {
@@ -86,16 +89,17 @@ export async function routeMessage(
       )
       break
 
-    case 'query_summary':
+    case 'query_summary': {
       const period = (parsed.period || 'month') as 'today' | 'week' | 'month'
+      const filter = { type: 'period' as const, period }
       console.log(`[Router] [${messageId}] Dispatching to handleQuerySummary — period: ${period}`)
-      await handleQuerySummary(sock, remoteJid, msg, ledgerId, period)
+      await handleQuerySummary(sock, remoteJid, msg, ledgerId, filter)
       break
+    }
 
     case 'set_budget':
       console.log(`[Router] [${messageId}] Dispatching to handleSetBudget — amount: ${parsed.amount}`)
       if (parsed.amount) {
-        const { handleSetBudget } = await import('../handlers/budget')
         await handleSetBudget(sock, remoteJid, msg, ledgerId, parsed.amount)
       } else {
         console.warn(`[Router] [${messageId}] set_budget intent but no amount parsed`)
@@ -106,7 +110,6 @@ export async function routeMessage(
     case 'set_income':
       console.log(`[Router] [${messageId}] Dispatching to handleSetIncome — amount: ${parsed.amount}`)
       if (parsed.amount) {
-        const { handleSetIncome } = await import('../handlers/budget')
         await handleSetIncome(sock, remoteJid, msg, ledgerId, parsed.amount)
       } else {
         console.warn(`[Router] [${messageId}] set_income intent but no amount parsed`)
@@ -143,17 +146,45 @@ async function handleSlashCommand(
       break
 
     case 'summary':
-      let period: 'today' | 'week' | 'month' = 'month'
-      if (args.length > 0) {
-        const requested = args[0].toLowerCase()
-        if (requested === 'today') period = 'today'
-        else if (requested === 'week') period = 'week'
-        else if (requested === 'month') period = 'month'
-      }
-      await handleQuerySummary(sock, remoteJid, msg, ledgerId, period)
+      await handleQuerySummary(sock, remoteJid, msg, ledgerId, parseDateFilter(args))
       break
 
-    case 'budget':
+    case 'transactions':
+      await handleTransactionsList(sock, remoteJid, msg, ledgerId, parseDateFilter(args))
+      break
+
+    case 'income': {
+      // If first arg looks like an amount (digits / k / M suffix) → set monthly income
+      // Otherwise → show income report
+      if (args.length > 0 && isAmountArg(args[0])) {
+        const amount = parseAmount(args[0])
+        if (!amount) {
+          await sendTextReply(sock, remoteJid, "Invalid amount. Use: /income 5000000 or /income 5jt")
+          return
+        }
+        await handleSetIncome(sock, remoteJid, msg, ledgerId, amount)
+      } else {
+        await handleIncomeReport(sock, remoteJid, msg, ledgerId, parseDateFilter(args))
+      }
+      break
+    }
+
+    case 'set-income':
+    case 'setincome': {
+      if (args.length === 0) {
+        await sendTextReply(sock, remoteJid, "Usage: /set-income <amount>")
+        return
+      }
+      const amount = parseAmount(args[0])
+      if (!amount) {
+        await sendTextReply(sock, remoteJid, "Invalid amount. Use: /set-income 5000000")
+        return
+      }
+      await handleSetIncome(sock, remoteJid, msg, ledgerId, amount)
+      break
+    }
+
+    case 'budget': {
       if (args.length === 0) {
         await sendTextReply(sock, remoteJid, "Usage: /budget <amount>")
         return
@@ -165,19 +196,7 @@ async function handleSlashCommand(
       }
       await handleSetBudget(sock, remoteJid, msg, ledgerId, budgetAmount)
       break
-
-    case 'income':
-      if (args.length === 0) {
-        await sendTextReply(sock, remoteJid, "Usage: /income <amount>")
-        return
-      }
-      const incomeAmount = parseAmount(args[0])
-      if (!incomeAmount) {
-        await sendTextReply(sock, remoteJid, "Invalid amount. Use: /income 5000000")
-        return
-      }
-      await handleSetIncome(sock, remoteJid, msg, ledgerId, incomeAmount)
-      break
+    }
 
     default:
       await sendTextReply(sock, remoteJid, "Unknown command. Type /help for all commands.")
@@ -185,13 +204,16 @@ async function handleSlashCommand(
   }
 }
 
+/** Returns true if the string looks like a raw amount (not a date). */
+function isAmountArg(text: string): boolean {
+  return /^[\d.,]+([kmrbjt]*)$/i.test(text.trim())
+}
+
 function parseAmount(text: string): number | null {
   const text_lower = text.toLowerCase().trim()
 
-  // Remove non-digit characters except k, rb, jt, m
   let numStr = text_lower.replace(/[^\d.kmrbjt]/g, '')
 
-  // Parse base number
   const match = numStr.match(/^([\d.]+)([kmrbjt]*)/)
   if (!match) return null
 
@@ -200,7 +222,6 @@ function parseAmount(text: string): number | null {
 
   const suffix = match[2].toLowerCase()
 
-  // Convert suffix
   if (suffix.includes('jt')) {
     num *= 1000000
   } else if (suffix.includes('rb')) {

@@ -1,6 +1,6 @@
 import { db } from '../db'
 import { transactions, users } from '../db/schema'
-import { eq, and, gte, lte, sql } from 'drizzle-orm'
+import { eq, and, gte, lte, lt } from 'drizzle-orm'
 import type { ParsedData } from '../ai/ollama'
 
 export async function recordTransaction(data: {
@@ -201,4 +201,64 @@ export async function getTotalIncomeByPeriod(ledgerId: string, period: 'today' |
   return txns
     .filter((t) => t.transactionType === 'income')
     .reduce((sum, t) => sum + t.amount, 0)
+}
+
+// ─── Date-range queries ───────────────────────────────────────────────────────
+
+export async function getTransactionsInRange(ledgerId: string, start: Date, end: Date) {
+  return await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.ledgerId, ledgerId),
+      gte(transactions.createdAt, start),
+      lt(transactions.createdAt, end)
+    ),
+    orderBy: (t, { desc }) => [desc(t.createdAt)],
+  })
+}
+
+export type TransactionWithUser = typeof transactions.$inferSelect & {
+  memberName: string
+}
+
+export async function getTransactionsWithUserInRange(
+  ledgerId: string,
+  start: Date,
+  end: Date
+): Promise<TransactionWithUser[]> {
+  const txns = await getTransactionsInRange(ledgerId, start, end)
+
+  // Batch-fetch unique users
+  const userIds = [...new Set(txns.map((t) => t.userId))]
+  const userMap: Record<string, string> = {}
+
+  await Promise.all(
+    userIds.map(async (uid) => {
+      const user = await db.query.users.findFirst({ where: eq(users.id, uid) })
+      userMap[uid] = user?.displayName || user?.phoneNumber || uid
+    })
+  )
+
+  return txns.map((t) => ({ ...t, memberName: userMap[t.userId] || t.userId }))
+}
+
+export async function getTotalByTypeInRange(
+  ledgerId: string,
+  start: Date,
+  end: Date,
+  type: 'income' | 'expense'
+): Promise<number> {
+  const txns = await getTransactionsInRange(ledgerId, start, end)
+  return txns
+    .filter((t) => t.transactionType === type)
+    .reduce((sum, t) => sum + t.amount, 0)
+}
+
+export async function getByTypeInRange(
+  ledgerId: string,
+  start: Date,
+  end: Date,
+  type: 'income' | 'expense'
+): Promise<TransactionWithUser[]> {
+  const all = await getTransactionsWithUserInRange(ledgerId, start, end)
+  return all.filter((t) => t.transactionType === type)
 }
