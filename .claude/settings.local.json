@@ -7,7 +7,10 @@
       "Bash(bunx tsc *)",
       "Bash(bun --eval \"import './src/ai/claude'\")",
       "Bash(bun remove *)",
-      "Bash(curl -s -X GET \"https://api.ollama.com/api/tags\" -H \"Authorization: Bearer 7512101aa27c4f6cabcb791dd7c6cedb.-eJACVDHVGlqcNR6lwdDRxHJ\")"
+      "Bash(curl -s -X GET \"https://api.ollama.com/api/tags\" -H \"Authorization: Bearer 7512101aa27c4f6cabcb791dd7c6cedb.-eJACVDHVGlqcNR6lwdDRxHJ\")",
+      "Bash(find *)",
+      "Bash(bun check *)",
+      "Bash(timeout 10 bun src/index.ts)"
     ]
   }
 }

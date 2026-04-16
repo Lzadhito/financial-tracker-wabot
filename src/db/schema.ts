@@ -73,6 +73,7 @@ export const transactions = pgTable(
     rawMessage: text('raw_message').notNull(),
     aiParsedData: jsonb('ai_parsed_data'), // full Ollama response for debugging
     createdAt: timestamp('created_at').notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at'),
   },
   (table) => ({
     ledgerCreatedIdx: index('transactions_ledger_created_idx').on(

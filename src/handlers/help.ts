@@ -35,6 +35,11 @@ export async function handleHelp(
   helpText += `• /transactions today | week\n`
   helpText += `• /transactions 04/16/2026 — specific day\n\n`
 
+  helpText += `*Delete a Transaction:*\n`
+  helpText += `• /delete <id> — mark a transaction as deleted\n`
+  helpText += `  _Get the ID from /transactions (e.g. /delete abc12345)_\n`
+  helpText += `  _Deleted transactions still appear in the list but are not counted_\n\n`
+
   helpText += `*Settings:*\n`
   helpText += `• /budget 2000000 — set monthly budget\n`
   helpText += `• /set-income 5000000 — set monthly income goal\n\n`

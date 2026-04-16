@@ -37,10 +37,11 @@ export async function handleTransactionsList(
       return
     }
 
-    const totalIncome = txns
+    const active = txns.filter((t) => t.deletedAt === null)
+    const totalIncome = active
       .filter((t) => t.transactionType === 'income')
       .reduce((sum, t) => sum + t.amount, 0)
-    const totalExpense = txns
+    const totalExpense = active
       .filter((t) => t.transactionType === 'expense')
       .reduce((sum, t) => sum + t.amount, 0)
 
@@ -52,14 +53,23 @@ export async function handleTransactionsList(
     replyText += '\n'
 
     for (const txn of displayed) {
+      const shortId = txn.id.slice(0, 8)
+      const isDeleted = txn.deletedAt !== null
       const dateStr = txn.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       const timeStr = txn.createdAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
       const typeEmoji = TYPE_EMOJI[txn.transactionType] || '•'
       const catEmoji = CATEGORY_EMOJI[txn.category] || '📌'
       const desc = txn.description || txn.category
-      replyText += `${typeEmoji} ${dateStr} ${timeStr}\n`
-      replyText += `   ${catEmoji} ${formatRupiah(txn.amount)} — ${desc}\n`
-      replyText += `   👤 ${txn.memberName}\n`
+
+      if (isDeleted) {
+        replyText += `${typeEmoji} ~[${shortId}] ${dateStr} ${timeStr}~\n`
+        replyText += `   ~${catEmoji} ${formatRupiah(txn.amount)} — ${desc}~\n`
+        replyText += `   ~👤 ${txn.memberName}~ _(deleted)_\n`
+      } else {
+        replyText += `${typeEmoji} [${shortId}] ${dateStr} ${timeStr}\n`
+        replyText += `   ${catEmoji} ${formatRupiah(txn.amount)} — ${desc}\n`
+        replyText += `   👤 ${txn.memberName}\n`
+      }
     }
 
     if (txns.length > 15) {

@@ -6,6 +6,7 @@ import { handleSetBudget, handleSetIncome } from '../handlers/budget'
 import { handleLogTransaction } from '../handlers/transaction'
 import { handleIncomeReport } from '../handlers/income-report'
 import { handleTransactionsList } from '../handlers/transactions-list'
+import { handleDeleteTransaction } from '../handlers/delete-transaction'
 import { sendTextReply } from '../whatsapp/sender'
 import { parseDateFilter } from '../utils/date-filter'
 
@@ -197,6 +198,10 @@ async function handleSlashCommand(
       await handleSetBudget(sock, remoteJid, msg, ledgerId, budgetAmount)
       break
     }
+
+    case 'delete':
+      await handleDeleteTransaction(sock, remoteJid, msg, ledgerId, args)
+      break
 
     default:
       await sendTextReply(sock, remoteJid, "Unknown command. Type /help for all commands.")

@@ -1,6 +1,6 @@
 import { db } from '../db'
 import { transactions, users } from '../db/schema'
-import { eq, and, gte, lte, lt } from 'drizzle-orm'
+import { eq, and, gte, lte, lt, isNull } from 'drizzle-orm'
 import type { ParsedData } from '../ai/ollama'
 
 export async function recordTransaction(data: {
@@ -40,7 +40,10 @@ export async function findTransactionByMessageId(messageId: string) {
 
 export async function getTransactionsByLedger(ledgerId: string) {
   return await db.query.transactions.findMany({
-    where: eq(transactions.ledgerId, ledgerId),
+    where: and(
+      eq(transactions.ledgerId, ledgerId),
+      isNull(transactions.deletedAt)
+    ),
   })
 }
 
@@ -55,7 +58,8 @@ export async function getTodayTransactions(ledgerId: string) {
     where: and(
       eq(transactions.ledgerId, ledgerId),
       gte(transactions.createdAt, today),
-      lte(transactions.createdAt, tomorrow)
+      lte(transactions.createdAt, tomorrow),
+      isNull(transactions.deletedAt)
     ),
   })
 }
@@ -70,7 +74,8 @@ export async function getWeekTransactions(ledgerId: string) {
     where: and(
       eq(transactions.ledgerId, ledgerId),
       gte(transactions.createdAt, weekAgo),
-      lte(transactions.createdAt, today)
+      lte(transactions.createdAt, today),
+      isNull(transactions.deletedAt)
     ),
   })
 }
@@ -84,7 +89,8 @@ export async function getMonthTransactions(ledgerId: string) {
   return await db.query.transactions.findMany({
     where: and(
       eq(transactions.ledgerId, ledgerId),
-      gte(transactions.createdAt, monthAgo)
+      gte(transactions.createdAt, monthAgo),
+      isNull(transactions.deletedAt)
     ),
   })
 }
@@ -96,7 +102,8 @@ export async function getCurrentMonthTransactions(ledgerId: string) {
   return await db.query.transactions.findMany({
     where: and(
       eq(transactions.ledgerId, ledgerId),
-      gte(transactions.createdAt, monthStart)
+      gte(transactions.createdAt, monthStart),
+      isNull(transactions.deletedAt)
     ),
   })
 }
@@ -210,6 +217,19 @@ export async function getTransactionsInRange(ledgerId: string, start: Date, end:
     where: and(
       eq(transactions.ledgerId, ledgerId),
       gte(transactions.createdAt, start),
+      lt(transactions.createdAt, end),
+      isNull(transactions.deletedAt)
+    ),
+    orderBy: (t, { desc }) => [desc(t.createdAt)],
+  })
+}
+
+// For display only — includes soft-deleted transactions (shown with a flag)
+export async function getAllTransactionsInRange(ledgerId: string, start: Date, end: Date) {
+  return await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.ledgerId, ledgerId),
+      gte(transactions.createdAt, start),
       lt(transactions.createdAt, end)
     ),
     orderBy: (t, { desc }) => [desc(t.createdAt)],
@@ -225,7 +245,7 @@ export async function getTransactionsWithUserInRange(
   start: Date,
   end: Date
 ): Promise<TransactionWithUser[]> {
-  const txns = await getTransactionsInRange(ledgerId, start, end)
+  const txns = await getAllTransactionsInRange(ledgerId, start, end)
 
   // Batch-fetch unique users
   const userIds = [...new Set(txns.map((t) => t.userId))]
@@ -261,4 +281,28 @@ export async function getByTypeInRange(
 ): Promise<TransactionWithUser[]> {
   const all = await getTransactionsWithUserInRange(ledgerId, start, end)
   return all.filter((t) => t.transactionType === type)
+}
+
+export async function getTransactionByShortId(shortId: string, ledgerId: string) {
+  // Fetch all (including deleted) for the ledger, then match by 8-char UUID prefix in JS
+  const candidates = await db.query.transactions.findMany({
+    where: eq(transactions.ledgerId, ledgerId),
+  })
+  return candidates.find((t) => t.id.startsWith(shortId)) ?? null
+}
+
+export async function softDeleteTransaction(transactionId: string, ledgerId: string) {
+  const [updated] = await db
+    .update(transactions)
+    .set({ deletedAt: new Date() })
+    .where(
+      and(
+        eq(transactions.id, transactionId),
+        eq(transactions.ledgerId, ledgerId),
+        isNull(transactions.deletedAt)
+      )
+    )
+    .returning()
+
+  return updated ?? null
 }
