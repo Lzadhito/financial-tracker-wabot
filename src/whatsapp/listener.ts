@@ -73,20 +73,27 @@ export async function setupMessageListener(sock: WASocket) {
         // Handle mention filter for groups
         if (isGroup) {
           const botJid = jidNormalizedUser(sock.user?.id ?? '')
+          const botLid = sock.user?.lid ? jidNormalizedUser(sock.user.lid) : null
           const botPhoneNumber = botJid.split('@')[0]
           const mentionedJids = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []
           const normalizedMentions = mentionedJids.map((jid) => jidNormalizedUser(jid))
-          const isBotMentioned = normalizedMentions.some((jid) => jid === botJid)
+          const isBotMentioned = normalizedMentions.some(
+            (jid) => jid === botJid || (botLid !== null && jid === botLid),
+          )
 
-          console.log(`[Listener] [${msgId}] Group message — botJid: ${botJid}, mentionedJids: [${normalizedMentions.join(', ')}], isBotMentioned: ${isBotMentioned}`)
+          console.log(`[Listener] [${msgId}] Group message — botJid: ${botJid}, botLid: ${botLid ?? 'none'}, mentionedJids: [${normalizedMentions.join(', ')}], isBotMentioned: ${isBotMentioned}`)
 
           if (!isBotMentioned) {
             console.log(`[Listener] [${msgId}] Skipping — bot not mentioned in group`)
             continue // Not mentioned, skip silently
           }
 
-          // Strip bot mention from text
+          // Strip bot mention from text (by phone number or LID)
           text = text.replace(new RegExp(`@${botPhoneNumber}`, 'g'), '').trim()
+          if (botLid) {
+            const botLidNumber = botLid.split('@')[0]
+            text = text.replace(new RegExp(`@${botLidNumber}`, 'g'), '').trim()
+          }
           console.log(`[Listener] [${msgId}] Text after stripping mention: "${text}"`)
         }
 

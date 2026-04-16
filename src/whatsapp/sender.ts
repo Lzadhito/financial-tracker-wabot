@@ -1,4 +1,4 @@
-import type { WASocket, WAMessage, proto } from '@whiskeysockets/baileys'
+import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 
 export async function sendTypingIndicator(
   sock: WASocket,
@@ -20,12 +20,7 @@ export async function sendTextReply(
   quotedMsg?: WAMessage
 ) {
   try {
-    const options: { quoted?: proto.IMessage } = {}
-    if (quotedMsg) {
-      options.quoted = quotedMsg.message ?? undefined
-    }
-
-    await sock.sendMessage(remoteJid, { text }, options)
+    await sock.sendMessage(remoteJid, { text }, quotedMsg ? { quoted: quotedMsg } : undefined)
   } catch (error) {
     console.error('[WhatsApp] Failed to send message:', error)
     throw error
