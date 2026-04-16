@@ -27,7 +27,7 @@ export async function handleQuerySummary(
     const totalIncome = await getTotalByTypeInRange(ledgerId, start, end, 'income')
 
     const txns = await getTransactionsWithUserInRange(ledgerId, start, end)
-    const expenses = txns.filter((t) => t.transactionType === 'expense')
+    const expenses = txns.filter((t) => t.transactionType === 'expense' && t.deletedAt === null)
 
     let replyText = `📊 *Summary — ${label}*\n\n`
 
