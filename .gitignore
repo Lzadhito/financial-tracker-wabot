@@ -1,0 +1,23 @@
+# deps
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# WhatsApp auth state
+.baileys_auth/
+
+# Database migrations
+drizzle/
+
+# Build output
+dist/
+build/
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
