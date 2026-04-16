@@ -8,6 +8,15 @@ export async function findOrCreateUser(phoneNumber: string, displayName?: string
   })
 
   if (existing) {
+    // Keep display name up-to-date with the user's WhatsApp push name
+    if (displayName && displayName !== existing.displayName) {
+      const [updated] = await db
+        .update(users)
+        .set({ displayName })
+        .where(eq(users.id, existing.id))
+        .returning()
+      return updated
+    }
     return existing
   }
 

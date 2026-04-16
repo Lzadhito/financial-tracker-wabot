@@ -101,9 +101,10 @@ export async function setupMessageListener(sock: WASocket) {
         await sendTypingIndicator(sock, remoteJid, true)
 
         // Find or create user
-        console.log(`[Listener] [${msgId}] Finding/creating user for phone: ${phoneNumber}`)
-        const user = await findOrCreateUser(phoneNumber)
-        console.log(`[Listener] [${msgId}] User: id=${user.id}`)
+        const pushName = msg.pushName || undefined
+        console.log(`[Listener] [${msgId}] Finding/creating user for phone: ${phoneNumber}, pushName: ${pushName ?? '(none)'}`)
+        const user = await findOrCreateUser(phoneNumber, pushName)
+        console.log(`[Listener] [${msgId}] User: id=${user.id}, displayName=${user.displayName ?? '(none)'}`)
 
         // Find or create ledger
         let ledger = null
