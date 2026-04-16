@@ -283,12 +283,46 @@ export async function getByTypeInRange(
   return all.filter((t) => t.transactionType === type)
 }
 
-export async function getTransactionByShortId(shortId: string, ledgerId: string) {
-  // Fetch all (including deleted) for the ledger, then match by 8-char UUID prefix in JS
-  const candidates = await db.query.transactions.findMany({
-    where: eq(transactions.ledgerId, ledgerId),
+export async function findTransactionsByNameAndTime(
+  ledgerId: string,
+  query: string,
+  start: Date,
+  end: Date
+) {
+  const txns = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.ledgerId, ledgerId),
+      gte(transactions.createdAt, start),
+      lt(transactions.createdAt, end),
+      isNull(transactions.deletedAt)
+    ),
   })
-  return candidates.find((t) => t.id.startsWith(shortId)) ?? null
+
+  const lowerQuery = query.toLowerCase()
+  return txns.filter(
+    (t) =>
+      t.description?.toLowerCase().includes(lowerQuery) ||
+      t.rawMessage.toLowerCase().includes(lowerQuery) ||
+      t.category.toLowerCase().includes(lowerQuery)
+  )
+}
+
+export async function findTransactionsByName(ledgerId: string, query: string) {
+  const txns = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.ledgerId, ledgerId),
+      isNull(transactions.deletedAt)
+    ),
+    orderBy: (t, { desc }) => [desc(t.createdAt)],
+  })
+
+  const lowerQuery = query.toLowerCase()
+  return txns.filter(
+    (t) =>
+      t.description?.toLowerCase().includes(lowerQuery) ||
+      t.rawMessage.toLowerCase().includes(lowerQuery) ||
+      t.category.toLowerCase().includes(lowerQuery)
+  )
 }
 
 export async function softDeleteTransaction(transactionId: string, ledgerId: string) {

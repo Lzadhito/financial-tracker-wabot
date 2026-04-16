@@ -36,8 +36,9 @@ export async function handleHelp(
   helpText += `• /transactions 04/16/2026 — specific day\n\n`
 
   helpText += `*Delete a Transaction:*\n`
-  helpText += `• /delete <id> — mark a transaction as deleted\n`
-  helpText += `  _Get the ID from /transactions (e.g. /delete abc12345)_\n`
+  helpText += `• /delete <name> <day> <month> [HH:MM]\n`
+  helpText += `  _e.g. /delete beli kopi 16 april 15:03_\n`
+  helpText += `  _e.g. /delete makan siang 16 april_\n`
   helpText += `  _Deleted transactions still appear in the list but are not counted_\n\n`
 
   helpText += `*Settings:*\n`
