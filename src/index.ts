@@ -1,11 +1,15 @@
 import { Hono } from 'hono'
 import { env } from './env'
-import { initializeWASocket, setConnectionState } from './whatsapp/client'
+import { initializeWASocket } from './whatsapp/client'
 import { setupMessageListener } from './whatsapp/listener'
 import { startWeeklyRecapJob } from './jobs/weekly-recap'
 import adminRoutes from './routes/admin'
+import { setupDiscordLogger } from './utils/discord-logger'
 
 const app = new Hono()
+
+// Enable Discord error forwarding as early as possible
+setupDiscordLogger()
 
 // Mount admin routes
 app.route('/', adminRoutes)

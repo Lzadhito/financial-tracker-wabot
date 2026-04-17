@@ -7,6 +7,7 @@ const envSchema = z.object({
   ADMIN_API_KEY: z.string().min(1, 'ADMIN_API_KEY is required'),
   TZ: z.string().default('Asia/Jakarta'),
   NODE_ENV: z.enum(['development', 'production']).default('development'),
+  DISCORD_WEBHOOK_URL: z.string().url().optional(),
 })
 
 export type Env = z.infer<typeof envSchema>
