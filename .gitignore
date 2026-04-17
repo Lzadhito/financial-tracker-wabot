@@ -9,8 +9,8 @@ node_modules/
 # WhatsApp auth state
 .baileys_auth/
 
-# Database migrations
-drizzle/
+# Database migrations (track these for deployment)
+# drizzle/
 
 # Build output
 dist/
