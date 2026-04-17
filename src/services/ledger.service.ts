@@ -53,6 +53,19 @@ export async function getLedgerMembers(ledgerId: string) {
   })
 }
 
+export async function getMembersWithDisplayNames(
+  ledgerId: string
+): Promise<{ userId: string; displayName: string }[]> {
+  const members = await db.query.ledgerMembers.findMany({
+    where: eq(ledgerMembers.ledgerId, ledgerId),
+    with: { user: true },
+  })
+  return members.map((m) => ({
+    userId: m.userId,
+    displayName: m.user?.displayName || m.user?.phoneNumber || m.userId,
+  }))
+}
+
 export async function getUserLedgers(userId: string) {
   return await db
     .select({

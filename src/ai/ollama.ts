@@ -95,6 +95,67 @@ function stripMarkdownFences(text: string): string {
   return text.replace(/^```json\s*\n?|\n?```$/g, '').trim()
 }
 
+const memberMatchSchema = z.object({
+  index: z.number().int().nullable(),
+})
+
+/**
+ * Uses AI to fuzzy-match a query name against a list of ledger members.
+ * Returns the userId of the best match, or null if no good match was found.
+ */
+export async function matchMemberNameWithOllama(
+  query: string,
+  members: { userId: string; displayName: string }[]
+): Promise<string | null> {
+  if (members.length === 0) return null
+
+  // Fast path: exact or normalized match — no AI needed
+  const normalizedQuery = query.trim().toLowerCase()
+  const exactMatch = members.find(
+    (m) => m.displayName.trim().toLowerCase() === normalizedQuery
+  )
+  if (exactMatch) return exactMatch.userId
+
+  // AI path for partial/fuzzy matching
+  const numberedList = members
+    .map((m, i) => `${i}: ${m.displayName}`)
+    .join('\n')
+
+  const systemMsg = `You are a name matcher. Given a query and a numbered list of member names, return the 0-based index of the best matching name.
+The query may be a partial name, nickname, or typo. Match as best you can.
+If there is no reasonable match, return null.
+
+Member list:
+${numberedList}
+
+Return ONLY a JSON object with field "index": an integer (0-based index) or null.
+Example: {"index":2} or {"index":null}
+Respond with ONLY the JSON. No markdown, no explanation.`
+
+  try {
+    const response = await ollama.chat({
+      model: env.OLLAMA_MODEL,
+      messages: [
+        { role: 'system', content: systemMsg },
+        { role: 'user', content: query },
+      ],
+      options: { temperature: 0.1 },
+    })
+
+    const stripped = stripMarkdownFences(response.message.content)
+    console.log(`[Ollama MemberMatch] Query: "${query}", Members: [${members.map((m) => m.displayName).join(', ')}], Response: ${stripped}`)
+    const parsed = JSON.parse(stripped)
+    const validated = memberMatchSchema.parse(parsed)
+
+    if (validated.index === null || validated.index < 0 || validated.index >= members.length) return null
+
+    return members[validated.index].userId
+  } catch (error) {
+    console.error('[Ollama MemberMatch] Error:', error instanceof Error ? error.message : error)
+    return null
+  }
+}
+
 const deleteQuerySchema = z.object({
   description: z.string(),
   day: z.number().int().min(1).max(31).nullable(),

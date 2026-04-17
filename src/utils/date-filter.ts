@@ -17,6 +17,23 @@ const MONTH_MAP: Record<string, number> = {
   december: 11, dec: 11,
 }
 
+const MONTH_NAMES_SET = new Set(Object.keys(MONTH_MAP))
+
+/**
+ * Returns true if the arg looks like a date/period token (not a person's name).
+ * Used to split name tokens from date tokens in slash command args.
+ */
+export function looksLikeDateArg(arg: string): boolean {
+  const lower = arg.trim().toLowerCase()
+  if (['today', 'week', 'month'].includes(lower)) return true
+  if (MONTH_NAMES_SET.has(lower)) return true
+  if (/^\d{4}$/.test(lower)) return true         // YYYY
+  if (/^\d{1,2}\/\d{4}$/.test(lower)) return true   // MM/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(lower)) return true  // MM/DD/YYYY
+  if (/^\d{1,2}$/.test(lower)) return true        // day number
+  return false
+}
+
 /**
  * Parse slash command args into a DateFilter.
  * Supported args:

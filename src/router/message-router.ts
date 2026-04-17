@@ -1,5 +1,5 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
-import { parseMessageWithOllama, type ParsedData } from '../ai/ollama'
+import { parseMessageWithOllama, matchMemberNameWithOllama, type ParsedData } from '../ai/ollama'
 import { handleHelp } from '../handlers/help'
 import { handleQuerySummary } from '../handlers/summary'
 import { handleSetBudget, handleSetIncome } from '../handlers/budget'
@@ -8,7 +8,9 @@ import { handleIncomeReport } from '../handlers/income-report'
 import { handleTransactionsList } from '../handlers/transactions-list'
 import { handleDeleteTransaction } from '../handlers/delete-transaction'
 import { sendTextReply } from '../whatsapp/sender'
-import { parseDateFilter } from '../utils/date-filter'
+import { parseDateFilter, looksLikeDateArg } from '../utils/date-filter'
+import { getMembersWithDisplayNames } from '../services/ledger.service'
+import { getUserByPhoneNumber } from '../services/user.service'
 
 export interface SlashCommandResult {
   type: 'slash_command'
@@ -43,7 +45,8 @@ export async function routeMessage(
   ledgerId: string,
   messageId: string,
   text: string,
-  phoneNumber: string
+  phoneNumber: string,
+  mentionedUserPhones: string[] = []
 ): Promise<void> {
   console.log(`[Router] [${messageId}] routeMessage called — text: "${text}", userId: ${userId}, ledgerId: ${ledgerId}`)
 
@@ -52,7 +55,7 @@ export async function routeMessage(
 
   if (slashResult) {
     console.log(`[Router] [${messageId}] Slash command detected — command: /${slashResult.command}, args: [${slashResult.args.join(', ')}]`)
-    await handleSlashCommand(sock, remoteJid, msg, ledgerId, slashResult)
+    await handleSlashCommand(sock, remoteJid, msg, ledgerId, slashResult, mentionedUserPhones)
     console.log(`[Router] [${messageId}] Slash command /${slashResult.command} handled`)
     return
   }
@@ -137,7 +140,8 @@ async function handleSlashCommand(
   remoteJid: string,
   msg: WAMessage,
   ledgerId: string,
-  result: SlashCommandResult
+  result: SlashCommandResult,
+  mentionedUserPhones: string[] = []
 ) {
   const { command, args } = result
 
@@ -146,13 +150,25 @@ async function handleSlashCommand(
       await handleHelp(sock, remoteJid, msg)
       break
 
-    case 'summary':
-      await handleQuerySummary(sock, remoteJid, msg, ledgerId, parseDateFilter(args))
+    case 'summary': {
+      const groupByUser = args.some((a) => a.toLowerCase() === 'user')
+      const nonUser = args.filter((a) => a.toLowerCase() !== 'user')
+      const { nameArgs, dateArgs } = splitNameAndDateArgs(nonUser)
+      const filteredUserId = await resolveUserFilter(sock, remoteJid, msg, ledgerId, mentionedUserPhones, nameArgs)
+      if (filteredUserId === false) return // error already sent
+      await handleQuerySummary(sock, remoteJid, msg, ledgerId, parseDateFilter(dateArgs), groupByUser, filteredUserId)
       break
+    }
 
-    case 'transactions':
-      await handleTransactionsList(sock, remoteJid, msg, ledgerId, parseDateFilter(args))
+    case 'transactions': {
+      const groupByUser = args.some((a) => a.toLowerCase() === 'user')
+      const nonUser = args.filter((a) => a.toLowerCase() !== 'user')
+      const { nameArgs, dateArgs } = splitNameAndDateArgs(nonUser)
+      const filteredUserId = await resolveUserFilter(sock, remoteJid, msg, ledgerId, mentionedUserPhones, nameArgs)
+      if (filteredUserId === false) return // error already sent
+      await handleTransactionsList(sock, remoteJid, msg, ledgerId, parseDateFilter(dateArgs), groupByUser, filteredUserId)
       break
+    }
 
     case 'income': {
       // If first arg looks like an amount (digits / k / M suffix) → set monthly income
@@ -214,6 +230,23 @@ function isAmountArg(text: string): boolean {
   return /^[\d.,]+([kmrbjt]*)$/i.test(text.trim())
 }
 
+/**
+ * Splits args into name tokens and date tokens.
+ * Anything that looks like a date stays in dateArgs; the rest is a name query.
+ */
+function splitNameAndDateArgs(args: string[]): { nameArgs: string[]; dateArgs: string[] } {
+  const nameArgs: string[] = []
+  const dateArgs: string[] = []
+  for (const arg of args) {
+    if (looksLikeDateArg(arg)) {
+      dateArgs.push(arg)
+    } else {
+      nameArgs.push(arg)
+    }
+  }
+  return { nameArgs, dateArgs }
+}
+
 function parseAmount(text: string): number | null {
   const text_lower = text.toLowerCase().trim()
 
@@ -236,4 +269,53 @@ function parseAmount(text: string): number | null {
   }
 
   return Math.floor(num)
+}
+
+/**
+ * Resolves a user filter for /transactions and /summary commands.
+ *
+ * Priority:
+ *   1. @mention in message → look up by phone number directly (exact, no AI)
+ *   2. Plain-text name args → AI fuzzy match against ledger members
+ *   3. Neither → null (no filter)
+ *
+ * Returns:
+ *   - string userId → use as filter
+ *   - null          → no filter (show all)
+ *   - false         → error already sent, caller should return
+ */
+async function resolveUserFilter(
+  sock: WASocket,
+  remoteJid: string,
+  msg: WAMessage,
+  ledgerId: string,
+  mentionedUserPhones: string[],
+  nameArgs: string[]
+): Promise<string | null | false> {
+  // 1. @mention takes priority — look up user by phone directly
+  if (mentionedUserPhones.length > 0) {
+    const phone = mentionedUserPhones[0]
+    const user = await getUserByPhoneNumber(phone)
+    if (!user) {
+      await sendTextReply(sock, remoteJid, `No registered user found for the mentioned contact.`, msg)
+      return false
+    }
+    console.log(`[Router] User filter via @mention: phone=${phone}, userId=${user.id}`)
+    return user.id
+  }
+
+  // 2. Plain-text name → AI fuzzy match
+  if (nameArgs.length > 0) {
+    const nameFilter = nameArgs.join(' ')
+    const members = await getMembersWithDisplayNames(ledgerId)
+    const userId = await matchMemberNameWithOllama(nameFilter, members)
+    if (!userId) {
+      await sendTextReply(sock, remoteJid, `No member found matching "${nameFilter}".`, msg)
+      return false
+    }
+    console.log(`[Router] User filter via AI name match: query="${nameFilter}", userId=${userId}`)
+    return userId
+  }
+
+  return null
 }

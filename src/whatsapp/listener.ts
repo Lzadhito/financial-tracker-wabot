@@ -71,6 +71,7 @@ export async function setupMessageListener(sock: WASocket) {
         console.log(`[Listener] [${msgId}] Text: "${text}"`)
 
         // Handle mention filter for groups
+        let mentionedUserPhones: string[] = []
         if (isGroup) {
           const botJid = jidNormalizedUser(sock.user?.id ?? '')
           const botLid = sock.user?.lid ? jidNormalizedUser(sock.user.lid) : null
@@ -88,13 +89,22 @@ export async function setupMessageListener(sock: WASocket) {
             continue // Not mentioned, skip silently
           }
 
+          // Collect non-bot mentioned phone numbers
+          mentionedUserPhones = normalizedMentions
+            .filter((jid) => jid !== botJid && (botLid === null || jid !== botLid))
+            .map((jid) => jid.split('@')[0])
+
           // Strip bot mention from text (by phone number or LID)
           text = text.replace(new RegExp(`@${botPhoneNumber}`, 'g'), '').trim()
           if (botLid) {
             const botLidNumber = botLid.split('@')[0]
             text = text.replace(new RegExp(`@${botLidNumber}`, 'g'), '').trim()
           }
-          console.log(`[Listener] [${msgId}] Text after stripping mention: "${text}"`)
+          // Also strip any remaining @phone tokens for non-bot mentions
+          for (const phone of mentionedUserPhones) {
+            text = text.replace(new RegExp(`@${phone}`, 'g'), '').trim()
+          }
+          console.log(`[Listener] [${msgId}] Text after stripping mentions: "${text}", mentionedUserPhones: [${mentionedUserPhones.join(', ')}]`)
         }
 
         // Send typing indicator
@@ -163,7 +173,8 @@ export async function setupMessageListener(sock: WASocket) {
           ledger.id,
           messageId,
           text,
-          phoneNumber
+          phoneNumber,
+          mentionedUserPhones
         )
 
         // Clear typing indicator
