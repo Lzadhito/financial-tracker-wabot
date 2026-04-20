@@ -11,6 +11,25 @@ import { sendTextReply } from '../whatsapp/sender'
 import { parseDateFilter, looksLikeDateArg } from '../utils/date-filter'
 import { getMembersWithDisplayNames } from '../services/ledger.service'
 import { getUserByPhoneNumber } from '../services/user.service'
+import { classify } from '../nlu/index'
+import { sendBotResponse } from '../response/builder'
+import { addUserTurn, addBotTurn, setLastAction, getSession } from '../session/store'
+import { handleButtonPress } from '../nlu/handlers/buttonPress'
+import { handleAddExpense } from '../nlu/handlers/addExpense'
+import { handleAddIncome } from '../nlu/handlers/addIncome'
+import { handleQuerySpending } from '../nlu/handlers/querySpending'
+import { handleQueryBalance } from '../nlu/handlers/queryBalance'
+import { handleSetBudget as nluHandleSetBudget } from '../nlu/handlers/setBudget'
+import { handleShowMenu } from '../nlu/handlers/showMenu'
+import { handleSmallTalk } from '../nlu/handlers/smallTalk'
+import { handleUnclear } from '../nlu/handlers/unclear'
+import { handleDeleteLastWithLedger } from '../nlu/handlers/deleteLast'
+import { handleEditLast } from '../nlu/handlers/editLast'
+import { handleExportReport } from '../nlu/handlers/exportReport'
+import { handleShowTransactions } from '../nlu/handlers/showTransactions'
+import { findTransactionByMessageId } from '../services/transaction.service'
+import type { BotResponse } from '../nlu/types'
+
 
 export interface SlashCommandResult {
   type: 'slash_command'
@@ -318,4 +337,131 @@ async function resolveUserFilter(
   }
 
   return null
+}
+
+/**
+ * Legacy command handler — wraps the existing routeMessage function
+ * so the new NLU pipeline (Phase 1) can fall back to it when the
+ * NLU_ENABLED feature flag is off.
+ *
+ * Same signature as routeMessage; exists as a semantic alias.
+ */
+export const handleLegacyCommand = routeMessage
+
+/**
+ * NLU-powered message routing — called when NLU_ENABLED flag is on.
+ *
+ * Flow:
+ *   1. Slash commands still go to legacy handler
+ *   2. Natural language → classify() → intent handler → BotResponse → send
+ */
+export async function routeNluMessage(
+  sock: WASocket,
+  remoteJid: string,
+  msg: WAMessage,
+  userId: string,
+  ledgerId: string,
+  messageId: string,
+  text: string,
+  senderJid: string,
+  pushName: string | undefined,
+  mentionedUserPhones: string[] = []
+): Promise<void> {
+  console.log(`[NLU Router] [${messageId}] routeNluMessage — text: "${text}"`)
+
+  // Slash commands always go to legacy handler
+  if (text.startsWith('/')) {
+    console.log(`[NLU Router] [${messageId}] Slash command — delegating to legacy handler`)
+    await routeMessage(sock, remoteJid, msg, userId, ledgerId, messageId, text, senderJid.split('@')[0], mentionedUserPhones)
+    return
+  }
+
+  // Record user turn in session
+  addUserTurn(remoteJid, senderJid, text)
+
+  const loggerName = pushName || senderJid.split('@')[0]
+
+  // Handle undo (special case: "undo" keyword within 5-min window)
+  if (text.toLowerCase() === 'undo') {
+    console.log(`[NLU Router] [${messageId}] Undo keyword detected`)
+    await handleButtonPress('undo', remoteJid, senderJid, loggerName, userId, ledgerId, sock, remoteJid, msg)
+    return
+  }
+
+
+  // Classify
+  const parsed = await classify(text, senderJid, remoteJid)
+  console.log(`[NLU Router] [${messageId}] Classified — intent: ${parsed.intent}, confidence: ${parsed.confidence}, source: ${parsed.source}`)
+
+
+  // Dedup check for add intents
+  if (parsed.intent === 'add_expense' || parsed.intent === 'add_income') {
+    const existing = await findTransactionByMessageId(messageId)
+    if (existing) {
+      console.log(`[NLU Router] [${messageId}] Dedup — transaction already recorded`)
+      return
+    }
+  }
+
+  // Dispatch to intent handler
+  let response: BotResponse
+
+  switch (parsed.intent) {
+    case 'add_expense':
+      response = await handleAddExpense(parsed, userId, ledgerId, messageId, text, loggerName, senderJid, remoteJid)
+      break
+
+    case 'add_income':
+      response = await handleAddIncome(parsed, userId, ledgerId, messageId, text, loggerName, senderJid, remoteJid)
+      break
+
+    case 'query_spending':
+      response = await handleQuerySpending(parsed, ledgerId)
+      break
+
+    case 'query_balance':
+      response = await handleQueryBalance(parsed, ledgerId)
+      break
+
+    case 'edit_last':
+      response = await handleEditLast()
+      break
+
+    case 'delete_last':
+      response = await handleDeleteLastWithLedger(remoteJid, ledgerId)
+      break
+
+    case 'set_budget':
+      response = await nluHandleSetBudget(parsed, ledgerId, loggerName, senderJid, remoteJid, userId)
+      break
+
+    case 'show_menu':
+      response = await handleShowMenu()
+      break
+
+    case 'show_transactions':
+      response = await handleShowTransactions(ledgerId)
+      break
+
+    case 'export_report':
+      response = await handleExportReport()
+      break
+
+    case 'small_talk':
+      response = await handleSmallTalk()
+      break
+
+    case 'unclear':
+    default:
+      response = await handleUnclear(parsed)
+      break
+  }
+
+  // Record bot turn
+  addBotTurn(remoteJid, parsed.intent, parsed.entities)
+
+  // Send response
+  await sendBotResponse(sock, remoteJid, response, msg)
+
+  console.log(`[NLU Router] [${messageId}] Done`)
 }

@@ -1,3 +1,8 @@
+// OWNERSHIP MODEL: one WhatsApp group = one ledger, keyed by group JID.
+// Entries tagged with logged_by (sender JID) for by-member reporting.
+// Any group member can edit/undo any entry. No per-entry privacy.
+// Deliberate product decision — do not extend without owner approval.
+
 import { pgTable, varchar, timestamp, uuid, integer, text, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 

@@ -58,9 +58,10 @@ export async function getTodayTransactions(ledgerId: string) {
     where: and(
       eq(transactions.ledgerId, ledgerId),
       gte(transactions.createdAt, today),
-      lte(transactions.createdAt, tomorrow),
+      lt(transactions.createdAt, tomorrow),
       isNull(transactions.deletedAt)
     ),
+    orderBy: (t, { desc }) => [desc(t.createdAt)],
   })
 }
 

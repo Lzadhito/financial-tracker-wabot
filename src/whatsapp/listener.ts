@@ -5,7 +5,7 @@ import {
   getContentType,
 } from '@whiskeysockets/baileys'
 import { sendTypingIndicator, sendTextReply } from './sender'
-import { routeMessage } from '../router/message-router'
+import { routeMessage, routeNluMessage } from '../router/message-router'
 import { findOrCreateUser } from '../services/user.service'
 import { getGroupLedger } from '../services/ledger.service'
 import {
@@ -13,6 +13,9 @@ import {
   handleDMOnboarding,
 } from '../handlers/onboarding'
 import { getUserLedgers } from '../services/ledger.service'
+import { isFeatureEnabled } from '../featureFlags'
+import { strings } from '../copy/strings'
+import { isRateLimited, getRateLimitMessage } from '../utils/rateLimit'
 
 export async function setupMessageListener(sock: WASocket) {
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
@@ -53,13 +56,40 @@ export async function setupMessageListener(sock: WASocket) {
 
         console.log(`[Listener] [${msgId}] Message type: ${msgType}`)
 
+        const isMediaMessage = msgType !== undefined && [
+          'imageMessage', 'audioMessage', 'videoMessage',
+          'documentMessage', 'stickerMessage',
+        ].includes(msgType)
+
         if (msgType === 'conversation') {
           text = msg.message.conversation ?? ''
         } else if (msgType === 'extendedTextMessage') {
           text = msg.message.extendedTextMessage?.text ?? ''
+        } else if (isMediaMessage) {
+          // Media messages: check if bot is mentioned, reply with "not supported"
+          if (isGroup) {
+            const contextInfo =
+              (msg.message as any)?.imageMessage?.contextInfo ??
+              (msg.message as any)?.audioMessage?.contextInfo ??
+              (msg.message as any)?.videoMessage?.contextInfo ??
+              (msg.message as any)?.documentMessage?.contextInfo
+            const mentionedJids = contextInfo?.mentionedJid ?? []
+            const botJid = jidNormalizedUser(sock.user?.id ?? '')
+            const botLid = sock.user?.lid ? jidNormalizedUser(sock.user.lid) : null
+            const normalizedMentions = mentionedJids.map((jid: string) => jidNormalizedUser(jid))
+            const isBotMentioned = normalizedMentions.some(
+              (jid: string) => jid === botJid || (botLid !== null && jid === botLid),
+            )
+            if (isBotMentioned) {
+              await sendTextReply(sock, remoteJid, strings.errors.mediaNotSupported(), msg)
+            }
+          } else {
+            // DM: always reply
+            await sendTextReply(sock, remoteJid, strings.errors.mediaNotSupported(), msg)
+          }
+          continue
         } else {
           console.log(`[Listener] [${msgId}] Skipping — unsupported message type: ${msgType}`)
-          // Ignore media-only messages
           continue
         }
 
@@ -105,6 +135,13 @@ export async function setupMessageListener(sock: WASocket) {
             text = text.replace(new RegExp(`@${phone}`, 'g'), '').trim()
           }
           console.log(`[Listener] [${msgId}] Text after stripping mentions: "${text}", mentionedUserPhones: [${mentionedUserPhones.join(', ')}]`)
+        }
+
+        // Rate limiting — check before any processing
+        if (isRateLimited(remoteJid)) {
+          console.log(`[Listener] [${msgId}] Rate limited — dropping message`)
+          await sendTextReply(sock, remoteJid, getRateLimitMessage())
+          continue
         }
 
         // Send typing indicator
@@ -164,18 +201,36 @@ export async function setupMessageListener(sock: WASocket) {
 
         console.log(`[Listener] [${msgId}] Routing message — userId: ${user.id}, ledgerId: ${ledger.id}, text: "${text}"`)
 
-        // Route message to appropriate handler
-        await routeMessage(
-          sock,
-          remoteJid,
-          msg,
-          user.id,
-          ledger.id,
-          messageId,
-          text,
-          phoneNumber,
-          mentionedUserPhones
-        )
+        // Route via NLU pipeline if enabled, otherwise legacy handler
+        const nluEnabled = await isFeatureEnabled('NLU_ENABLED', ledger.id)
+
+        if (nluEnabled && !text.startsWith('/')) {
+          console.log(`[Listener] [${msgId}] NLU_ENABLED — routing via NLU pipeline`)
+          await routeNluMessage(
+            sock,
+            remoteJid,
+            msg,
+            user.id,
+            ledger.id,
+            messageId,
+            text,
+            senderJid,
+            pushName,
+            mentionedUserPhones
+          )
+        } else {
+          await routeMessage(
+            sock,
+            remoteJid,
+            msg,
+            user.id,
+            ledger.id,
+            messageId,
+            text,
+            phoneNumber,
+            mentionedUserPhones
+          )
+        }
 
         // Clear typing indicator
         await sendTypingIndicator(sock, remoteJid, false)

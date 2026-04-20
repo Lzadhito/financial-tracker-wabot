@@ -4,6 +4,20 @@
 
 ---
 
+## Out of scope — NLU refactor
+
+The following items are deliberately deferred. Do not implement without owner approval.
+
+- Voice note transcription
+- Receipt photo OCR
+- Baileys ban contingency / Cloud API migration path
+- Bahasa Indonesia output toggle
+- Scheduled/future-dated entries (beyond "log for today" fallback)
+- Cross-group analytics (one user's view across all their groups)
+- Multi-instance deployment (session store assumes single instance unless repo already solves this)
+
+---
+
 ## Task 1: Fix Sales Invoice Date Picker — Allow Single Day Selection
 
 **Priority:** Tinggi (quick win)  
