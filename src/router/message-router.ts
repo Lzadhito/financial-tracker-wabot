@@ -1,5 +1,5 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
-import { parseMessageWithOllama, matchMemberNameWithOllama, type ParsedData } from '../ai/ollama'
+import { parseMessageWithOllama, matchMemberNameWithOllama, type ParsedData } from '../ai/haiku'
 import { handleHelp } from '../handlers/help'
 import { handleQuerySummary } from '../handlers/summary'
 import { handleSetBudget, handleSetIncome } from '../handlers/budget'

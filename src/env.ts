@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url('Invalid DATABASE_URL'),
-  OLLAMA_API_KEY: z.string().min(1, 'OLLAMA_API_KEY is required'),
-  OLLAMA_MODEL: z.string().default('qwen3.5'),
+  ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
+  ANTHROPIC_MODEL: z.string().default('claude-3-haiku-20240307'),
   ADMIN_API_KEY: z.string().min(1, 'ADMIN_API_KEY is required'),
   TZ: z.string().default('Asia/Jakarta'),
   NODE_ENV: z.enum(['development', 'production']).default('development'),

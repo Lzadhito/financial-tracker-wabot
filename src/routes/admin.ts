@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { env } from '../env'
 import { getConnectionState, getQRCode } from '../whatsapp/client'
-import { checkOllamaStatus } from '../ai/ollama'
+import { checkOllamaStatus } from '../ai/haiku'
 
 const app = new Hono()
 

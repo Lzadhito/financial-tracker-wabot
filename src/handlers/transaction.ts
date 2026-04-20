@@ -1,6 +1,6 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import { recordTransaction, findTransactionByMessageId, getTotalExpensesByPeriod } from '../services/transaction.service'
-import type { ParsedData } from '../ai/ollama'
+import type { ParsedData } from '../ai/haiku'
 import { sendTextReply } from '../whatsapp/sender'
 
 export async function handleLogTransaction(

@@ -1,13 +1,10 @@
-import { Ollama } from 'ollama'
+import Anthropic from '@anthropic-ai/sdk'
 import { env } from '../env'
 import { systemPrompt } from './prompts'
 import { z } from 'zod'
 
-const ollama = new Ollama({
-  host: 'https://api.ollama.com',
-  headers: {
-    Authorization: `Bearer ${env.OLLAMA_API_KEY}`,
-  },
+const anthropic = new Anthropic({
+  apiKey: env.ANTHROPIC_API_KEY,
 })
 
 const parsedDataSchema = z.object({
@@ -43,30 +40,28 @@ export async function parseMessageWithOllama(text: string): Promise<ParsedData |
   const startTime = Date.now()
 
   try {
-    const response = await ollama.chat({
-      model: env.OLLAMA_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: text },
-      ],
-      options: { temperature: 0.7 },
+    const response = await anthropic.messages.create({
+      model: env.ANTHROPIC_MODEL,
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: text }],
     })
 
-    const content = response.message.content
+    const content = response.content[0].type === 'text' ? response.content[0].text : ''
     const responseTime = Date.now() - startTime
 
-    console.log(`[Ollama Cloud] Model: ${env.OLLAMA_MODEL}, Response time: ${responseTime}ms, Status: OK`)
-    console.log(`[Ollama Cloud] Raw content: ${content}`)
+    console.log(`[Haiku] Model: ${env.ANTHROPIC_MODEL}, Response time: ${responseTime}ms, Status: OK`)
+    console.log(`[Haiku] Raw content: ${content}`)
 
     const stripped = stripMarkdownFences(content)
-    console.log(`[Ollama Cloud] Stripped content: ${stripped}`)
+    console.log(`[Haiku] Stripped content: ${stripped}`)
 
     let parsed: unknown
     try {
       parsed = JSON.parse(stripped)
     } catch (jsonErr) {
-      console.error(`[Ollama Cloud] JSON.parse failed: ${jsonErr instanceof Error ? jsonErr.message : jsonErr}`)
-      console.error(`[Ollama Cloud] Content that failed to parse: ${stripped}`)
+      console.error(`[Haiku] JSON.parse failed: ${jsonErr instanceof Error ? jsonErr.message : jsonErr}`)
+      console.error(`[Haiku] Content that failed to parse: ${stripped}`)
       return null
     }
 
@@ -74,18 +69,18 @@ export async function parseMessageWithOllama(text: string): Promise<ParsedData |
     try {
       validated = parsedDataSchema.parse(parsed)
     } catch (zodErr) {
-      console.error(`[Ollama Cloud] Zod validation failed:`, zodErr)
-      console.error(`[Ollama Cloud] Parsed object:`, parsed)
+      console.error(`[Haiku] Zod validation failed:`, zodErr)
+      console.error(`[Haiku] Parsed object:`, parsed)
       return null
     }
 
-    console.log(`[Ollama Cloud] Validated result:`, validated)
+    console.log(`[Haiku] Validated result:`, validated)
     return validated
   } catch (error) {
     if (error instanceof Error) {
-      console.error(`[Ollama Cloud] Error: ${error.message}`)
+      console.error(`[Haiku] Error: ${error.message}`)
     } else {
-      console.error('[Ollama Cloud] Unknown error:', error)
+      console.error('[Haiku] Unknown error:', error)
     }
     return null
   }
@@ -133,17 +128,16 @@ Example: {"index":2} or {"index":null}
 Respond with ONLY the JSON. No markdown, no explanation.`
 
   try {
-    const response = await ollama.chat({
-      model: env.OLLAMA_MODEL,
-      messages: [
-        { role: 'system', content: systemMsg },
-        { role: 'user', content: query },
-      ],
-      options: { temperature: 0.1 },
+    const response = await anthropic.messages.create({
+      model: env.ANTHROPIC_MODEL,
+      max_tokens: 256,
+      system: systemMsg,
+      messages: [{ role: 'user', content: query }],
     })
 
-    const stripped = stripMarkdownFences(response.message.content)
-    console.log(`[Ollama MemberMatch] Query: "${query}", Members: [${members.map((m) => m.displayName).join(', ')}], Response: ${stripped}`)
+    const text = response.content[0].type === 'text' ? response.content[0].text : ''
+    const stripped = stripMarkdownFences(text)
+    console.log(`[Haiku MemberMatch] Query: "${query}", Members: [${members.map((m) => m.displayName).join(', ')}], Response: ${stripped}`)
     const parsed = JSON.parse(stripped)
     const validated = memberMatchSchema.parse(parsed)
 
@@ -151,7 +145,7 @@ Respond with ONLY the JSON. No markdown, no explanation.`
 
     return members[validated.index].userId
   } catch (error) {
-    console.error('[Ollama MemberMatch] Error:', error instanceof Error ? error.message : error)
+    console.error('[Haiku MemberMatch] Error:', error instanceof Error ? error.message : error)
     return null
   }
 }
@@ -247,19 +241,17 @@ Output: {"description":"beli kopi","day":null,"month":null,"year":null,"hour":nu
 Respond with ONLY the JSON object. No markdown, no explanations.`
 
   try {
-    const response = await ollama.chat({
-      model: env.OLLAMA_MODEL,
-      messages: [
-        { role: 'system', content: systemMsg },
-        { role: 'user', content: text },
-      ],
-      options: { temperature: 0.1 },
+    const response = await anthropic.messages.create({
+      model: env.ANTHROPIC_MODEL,
+      max_tokens: 512,
+      system: systemMsg,
+      messages: [{ role: 'user', content: text }],
     })
 
-    const content = response.message.content
+    const content = response.content[0].type === 'text' ? response.content[0].text : ''
     const responseTime = Date.now() - startTime
-    console.log(`[Ollama DeleteQuery] Response time: ${responseTime}ms`)
-    console.log(`[Ollama DeleteQuery] Raw content: ${content}`)
+    console.log(`[Haiku DeleteQuery] Response time: ${responseTime}ms`)
+    console.log(`[Haiku DeleteQuery] Raw content: ${content}`)
 
     const stripped = stripMarkdownFences(content)
 
@@ -267,7 +259,7 @@ Respond with ONLY the JSON object. No markdown, no explanations.`
     try {
       parsed = JSON.parse(stripped)
     } catch {
-      console.error(`[Ollama DeleteQuery] JSON.parse failed on: ${stripped}`)
+      console.error(`[Haiku DeleteQuery] JSON.parse failed on: ${stripped}`)
       return null
     }
 
@@ -275,14 +267,14 @@ Respond with ONLY the JSON object. No markdown, no explanations.`
     try {
       validated = deleteQuerySchema.parse(parsed)
     } catch (zodErr) {
-      console.error(`[Ollama DeleteQuery] Zod validation failed:`, zodErr)
+      console.error(`[Haiku DeleteQuery] Zod validation failed:`, zodErr)
       return null
     }
 
-    console.log(`[Ollama DeleteQuery] Validated:`, validated)
+    console.log(`[Haiku DeleteQuery] Validated:`, validated)
     return validated
   } catch (error) {
-    console.error('[Ollama DeleteQuery] Error:', error instanceof Error ? error.message : error)
+    console.error('[Haiku DeleteQuery] Error:', error instanceof Error ? error.message : error)
     return null
   }
 }
@@ -295,17 +287,21 @@ export async function checkOllamaStatus(): Promise<{
   const startTime = Date.now()
 
   try {
-    await ollama.list()
+    await anthropic.messages.create({
+      model: env.ANTHROPIC_MODEL,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    })
     return {
       status: 'ok',
-      model: env.OLLAMA_MODEL,
+      model: env.ANTHROPIC_MODEL,
       responseTime: Date.now() - startTime,
     }
   } catch (error) {
-    console.error('[Ollama Cloud Status Check] Error:', error)
+    console.error('[Haiku Status Check] Error:', error)
     return {
       status: 'unreachable',
-      model: env.OLLAMA_MODEL,
+      model: env.ANTHROPIC_MODEL,
       responseTime: Date.now() - startTime,
     }
   }

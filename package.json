@@ -12,11 +12,11 @@
     "build": "bun build src/index.ts --outdir dist"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.14",
-    "ollama": "^0.6.3",
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
     "zod": "^4.3.6"

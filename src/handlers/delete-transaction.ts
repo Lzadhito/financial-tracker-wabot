@@ -1,7 +1,7 @@
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import { findTransactionsByNameAndTime, findTransactionsByName, softDeleteTransaction } from '../services/transaction.service'
 import { sendTextReply } from '../whatsapp/sender'
-import { parseDeleteQueryWithOllama } from '../ai/ollama'
+import { parseDeleteQueryWithOllama } from '../ai/haiku'
 
 interface ParsedQuery {
   description: string
