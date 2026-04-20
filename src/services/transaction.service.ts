@@ -49,10 +49,10 @@ export async function getTransactionsByLedger(ledgerId: string) {
 
 export async function getTodayTransactions(ledgerId: string) {
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  today.setUTCHours(0, 0, 0, 0)
 
   const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
 
   return await db.query.transactions.findMany({
     where: and(
@@ -68,8 +68,8 @@ export async function getTodayTransactions(ledgerId: string) {
 export async function getWeekTransactions(ledgerId: string) {
   const today = new Date()
   const weekAgo = new Date(today)
-  weekAgo.setDate(weekAgo.getDate() - 7)
-  weekAgo.setHours(0, 0, 0, 0)
+  weekAgo.setUTCDate(weekAgo.getUTCDate() - 7)
+  weekAgo.setUTCHours(0, 0, 0, 0)
 
   return await db.query.transactions.findMany({
     where: and(
@@ -84,8 +84,8 @@ export async function getWeekTransactions(ledgerId: string) {
 export async function getMonthTransactions(ledgerId: string) {
   const today = new Date()
   const monthAgo = new Date(today)
-  monthAgo.setMonth(monthAgo.getMonth() - 1)
-  monthAgo.setHours(0, 0, 0, 0)
+  monthAgo.setUTCMonth(monthAgo.getUTCMonth() - 1)
+  monthAgo.setUTCHours(0, 0, 0, 0)
 
   return await db.query.transactions.findMany({
     where: and(
@@ -98,7 +98,7 @@ export async function getMonthTransactions(ledgerId: string) {
 
 export async function getCurrentMonthTransactions(ledgerId: string) {
   const today = new Date()
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
 
   return await db.query.transactions.findMany({
     where: and(
