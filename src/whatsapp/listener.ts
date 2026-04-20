@@ -5,7 +5,7 @@ import {
   getContentType,
 } from '@whiskeysockets/baileys'
 import { sendTypingIndicator, sendTextReply } from './sender'
-import { routeMessage, routeNluMessage } from '../router/message-router'
+import { routeNluMessage } from '../router/message-router'
 import { findOrCreateUser } from '../services/user.service'
 import { getGroupLedger } from '../services/ledger.service'
 import {
@@ -13,7 +13,6 @@ import {
   handleDMOnboarding,
 } from '../handlers/onboarding'
 import { getUserLedgers } from '../services/ledger.service'
-import { isFeatureEnabled } from '../featureFlags'
 import { strings } from '../copy/strings'
 import { isRateLimited, getRateLimitMessage } from '../utils/rateLimit'
 
@@ -201,36 +200,18 @@ export async function setupMessageListener(sock: WASocket) {
 
         console.log(`[Listener] [${msgId}] Routing message — userId: ${user.id}, ledgerId: ${ledger.id}, text: "${text}"`)
 
-        // Route via NLU pipeline if enabled, otherwise legacy handler
-        const nluEnabled = await isFeatureEnabled('NLU_ENABLED', ledger.id)
-
-        if (nluEnabled && !text.startsWith('/')) {
-          console.log(`[Listener] [${msgId}] NLU_ENABLED — routing via NLU pipeline`)
-          await routeNluMessage(
-            sock,
-            remoteJid,
-            msg,
-            user.id,
-            ledger.id,
-            messageId,
-            text,
-            senderJid,
-            pushName,
-            mentionedUserPhones
-          )
-        } else {
-          await routeMessage(
-            sock,
-            remoteJid,
-            msg,
-            user.id,
-            ledger.id,
-            messageId,
-            text,
-            phoneNumber,
-            mentionedUserPhones
-          )
-        }
+        await routeNluMessage(
+          sock,
+          remoteJid,
+          msg,
+          user.id,
+          ledger.id,
+          messageId,
+          text,
+          senderJid,
+          pushName,
+          mentionedUserPhones
+        )
 
         // Clear typing indicator
         await sendTypingIndicator(sock, remoteJid, false)

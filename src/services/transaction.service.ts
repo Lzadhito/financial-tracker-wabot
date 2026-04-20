@@ -1,8 +1,6 @@
 import { db } from '../db'
 import { transactions, users } from '../db/schema'
 import { eq, and, gte, lte, lt, isNull, sql } from 'drizzle-orm'
-import type { ParsedData } from '../ai/haiku'
-
 export async function recordTransaction(data: {
   ledgerId: string
   userId: string
@@ -12,7 +10,7 @@ export async function recordTransaction(data: {
   transactionType: 'expense' | 'income'
   messageId: string
   rawMessage: string
-  aiParsedData: ParsedData
+  aiParsedData: unknown
 }) {
   const [created] = await db
     .insert(transactions)

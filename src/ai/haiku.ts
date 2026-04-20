@@ -1,90 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { env } from '../env'
-import { systemPrompt } from './prompts'
 import { z } from 'zod'
 
 const anthropic = new Anthropic({
   apiKey: env.ANTHROPIC_API_KEY,
 })
-
-const parsedDataSchema = z.object({
-  intent: z.enum([
-    'log_expense',
-    'log_income',
-    'query_summary',
-    'set_budget',
-    'set_income',
-    'unknown',
-  ]),
-  amount: z.number().positive().nullable(),
-  category: z
-    .enum([
-      'food',
-      'transport',
-      'bills',
-      'shopping',
-      'entertainment',
-      'health',
-      'education',
-      'income',
-      'other',
-    ])
-    .nullable(),
-  description: z.string().nullable(),
-  period: z.enum(['today', 'week', 'month', 'all']).nullable(),
-})
-
-export type ParsedData = z.infer<typeof parsedDataSchema>
-
-export async function parseMessageWithOllama(text: string): Promise<ParsedData | null> {
-  const startTime = Date.now()
-
-  try {
-    const response = await anthropic.messages.create({
-      model: env.ANTHROPIC_MODEL,
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: text }],
-    })
-
-    const content = response.content[0].type === 'text' ? response.content[0].text : ''
-    const responseTime = Date.now() - startTime
-
-    console.log(`[Haiku] Model: ${env.ANTHROPIC_MODEL}, Response time: ${responseTime}ms, Status: OK`)
-    console.log(`[Haiku] Raw content: ${content}`)
-
-    const stripped = stripMarkdownFences(content)
-    console.log(`[Haiku] Stripped content: ${stripped}`)
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(stripped)
-    } catch (jsonErr) {
-      console.error(`[Haiku] JSON.parse failed: ${jsonErr instanceof Error ? jsonErr.message : jsonErr}`)
-      console.error(`[Haiku] Content that failed to parse: ${stripped}`)
-      return null
-    }
-
-    let validated: ReturnType<typeof parsedDataSchema.parse>
-    try {
-      validated = parsedDataSchema.parse(parsed)
-    } catch (zodErr) {
-      console.error(`[Haiku] Zod validation failed:`, zodErr)
-      console.error(`[Haiku] Parsed object:`, parsed)
-      return null
-    }
-
-    console.log(`[Haiku] Validated result:`, validated)
-    return validated
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(`[Haiku] Error: ${error.message}`)
-    } else {
-      console.error('[Haiku] Unknown error:', error)
-    }
-    return null
-  }
-}
 
 function stripMarkdownFences(text: string): string {
   return text.replace(/^```json\s*\n?|\n?```$/g, '').trim()
