@@ -1,3 +1,4 @@
+import { subDays, format } from 'date-fns'
 import { db } from '../db'
 import { getCurrentSocket } from '../whatsapp/client'
 import { sql } from 'drizzle-orm'
@@ -5,7 +6,6 @@ import { groupChats, ledgers, users } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { getTotalExpensesByPeriod, getTransactionsByCategory } from '../services/transaction.service'
 import { getLedgerMembers } from '../services/ledger.service'
-import { sendTextReply } from '../whatsapp/sender'
 
 function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
@@ -41,14 +41,8 @@ async function buildWeeklySummary(ledgerId: string): Promise<string> {
   const byCategory = await getTransactionsByCategory(ledgerId, 'week')
 
   const today = new Date()
-  const weekStart = new Date(today)
-  weekStart.setDate(weekStart.getDate() - 7)
-
-  const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
-  const dateStr = `${weekStart.toLocaleDateString('en-US', options)}–${today.toLocaleDateString(
-    'en-US',
-    options
-  )}`
+  const weekStart = subDays(today, 7)
+  const dateStr = `${format(weekStart, 'MMM d')}–${format(today, 'MMM d')}`
 
   let text = `📊 *Weekly Summary (${dateStr})*\n\n`
   text += `Total spent: ${formatRupiah(totalExpenses)}\n`

@@ -1,3 +1,4 @@
+import { formatInTimeZone } from 'date-fns-tz'
 import type { BotResponse } from '../types'
 import { strings } from '../../copy/strings'
 import { getTodayTransactions } from '../../services/transaction.service'
@@ -41,7 +42,7 @@ export async function handleShowTransactions(
       const desc = txn.description || txn.category || 'Unnamed'
 
       // Format time as HH:mm
-      const time = new Date(txn.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
+      const time = formatInTimeZone(new Date(txn.createdAt), 'UTC', 'HH:mm')
 
       text += `${type} ${strings.formatAmount(txn.amount)} — ${desc}\n`
       text += `   ${userName} · ${time}\n`

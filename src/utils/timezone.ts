@@ -2,6 +2,8 @@
  * Timezone utilities — all times in UTC+7 (Asia/Jakarta)
  */
 
+import { subMinutes } from 'date-fns'
+
 export const JAKARTA_TZ = 'Asia/Jakarta'
 
 /**
@@ -36,13 +38,9 @@ export function getTodayInJakarta(): Date {
   })
   const parts = formatter.formatToParts(new Date())
   const dateMap = Object.fromEntries(parts.map((p) => [p.type, p.value]))
-  const date = new Date(
-    `${dateMap.year}-${dateMap.month}-${dateMap.day}T00:00:00`
-  )
-  // Adjust for timezone offset
+  const baseDate = new Date(`${dateMap.year}-${dateMap.month}-${dateMap.day}T00:00:00`)
   const offset = getJakartaOffsetMinutes()
-  date.setMinutes(date.getMinutes() - offset)
-  return date
+  return subMinutes(baseDate, offset)
 }
 
 /**

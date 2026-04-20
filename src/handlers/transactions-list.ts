@@ -1,3 +1,4 @@
+import { formatInTimeZone } from 'date-fns-tz'
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import { getTransactionsWithUserInRange } from '../services/transaction.service'
 import { sendTextReply } from '../whatsapp/sender'
@@ -119,8 +120,8 @@ function formatTxnLine(txn: {
 }): string {
   const shortId = txn.id.slice(0, 8)
   const isDeleted = txn.deletedAt !== null
-  const dateStr = txn.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
-  const timeStr = txn.createdAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
+  const dateStr = formatInTimeZone(txn.createdAt, 'UTC', 'MMM d')
+  const timeStr = formatInTimeZone(txn.createdAt, 'UTC', 'HH:mm')
   const typeEmoji = TYPE_EMOJI[txn.transactionType] || '•'
   const catEmoji = CATEGORY_EMOJI[txn.category] || '📌'
   const desc = txn.description || txn.category

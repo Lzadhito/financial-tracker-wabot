@@ -3,17 +3,19 @@
  * No inline literals in handler code — everything goes through here.
  */
 
+import { isSameDay } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import { formatAmountIDR } from '../nlu/indonesianNormalizer'
 import type { ParsedEntities, ExpenseItem } from '../nlu/types'
 
 function formatDate(d: Date): string {
   const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
+  const isToday = isSameDay(d, now)
+  const time = formatInTimeZone(d, 'UTC', 'HH:mm')
 
   if (isToday) return `Today, ${time}`
 
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) + `, ${time}`
+  return formatInTimeZone(d, 'UTC', 'MMM d, yyyy') + `, ${time}`
 }
 
 function capitalize(s: string): string {

@@ -1,3 +1,4 @@
+import { addDays, subDays, subMonths } from 'date-fns'
 import { db } from '../db'
 import { transactions, users } from '../db/schema'
 import { eq, and, gte, lte, lt, isNull, sql } from 'drizzle-orm'
@@ -46,11 +47,9 @@ export async function getTransactionsByLedger(ledgerId: string) {
 }
 
 export async function getTodayTransactions(ledgerId: string) {
-  const today = new Date()
-  today.setUTCHours(0, 0, 0, 0)
-
-  const tomorrow = new Date(today)
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+  const now = new Date()
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const tomorrow = addDays(today, 1)
 
   return await db.query.transactions.findMany({
     where: and(
@@ -64,10 +63,9 @@ export async function getTodayTransactions(ledgerId: string) {
 }
 
 export async function getWeekTransactions(ledgerId: string) {
-  const today = new Date()
-  const weekAgo = new Date(today)
-  weekAgo.setUTCDate(weekAgo.getUTCDate() - 7)
-  weekAgo.setUTCHours(0, 0, 0, 0)
+  const now = new Date()
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const weekAgo = subDays(today, 7)
 
   return await db.query.transactions.findMany({
     where: and(
@@ -80,10 +78,9 @@ export async function getWeekTransactions(ledgerId: string) {
 }
 
 export async function getMonthTransactions(ledgerId: string) {
-  const today = new Date()
-  const monthAgo = new Date(today)
-  monthAgo.setUTCMonth(monthAgo.getUTCMonth() - 1)
-  monthAgo.setUTCHours(0, 0, 0, 0)
+  const now = new Date()
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const monthAgo = subMonths(today, 1)
 
   return await db.query.transactions.findMany({
     where: and(
@@ -95,8 +92,8 @@ export async function getMonthTransactions(ledgerId: string) {
 }
 
 export async function getCurrentMonthTransactions(ledgerId: string) {
-  const today = new Date()
-  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
+  const now = new Date()
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
 
   return await db.query.transactions.findMany({
     where: and(

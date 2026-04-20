@@ -1,3 +1,8 @@
+import { addDays, addMonths, subDays, startOfDay, startOfMonth, getYear, format } from 'date-fns'
+import { fromZonedTime, toZonedTime, formatInTimeZone } from 'date-fns-tz'
+
+const JAKARTA_TZ = 'Asia/Jakarta'
+
 export type DateFilter =
   | { type: 'period'; period: 'today' | 'week' | 'month' }
   | { type: 'range'; start: Date; end: Date; label: string }
@@ -64,8 +69,8 @@ export function parseDateFilter(args: string[]): DateFilter {
   // Try YYYY (4-digit year only, single arg)
   if (args.length === 1 && /^\d{4}$/.test(raw)) {
     const year = parseInt(raw, 10)
-    const start = new Date(year, 0, 1, 0, 0, 0, 0)
-    const end = new Date(year + 1, 0, 1, 0, 0, 0, 0)
+    const start = fromZonedTime(new Date(year, 0, 1), JAKARTA_TZ)
+    const end = fromZonedTime(new Date(year + 1, 0, 1), JAKARTA_TZ)
     return { type: 'range', start, end, label: String(year) }
   }
 
@@ -76,9 +81,9 @@ export function parseDateFilter(args: string[]): DateFilter {
       const month = parseInt(monthYear[1], 10) - 1
       const year = parseInt(monthYear[2], 10)
       if (month >= 0 && month <= 11) {
-        const start = new Date(year, month, 1, 0, 0, 0, 0)
-        const end = new Date(year, month + 1, 1, 0, 0, 0, 0)
-        const label = start.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+        const start = fromZonedTime(new Date(year, month, 1), JAKARTA_TZ)
+        const end = fromZonedTime(addMonths(new Date(year, month, 1), 1), JAKARTA_TZ)
+        const label = format(new Date(year, month, 1), 'MMMM yyyy')
         return { type: 'range', start, end, label }
       }
     }
@@ -90,9 +95,9 @@ export function parseDateFilter(args: string[]): DateFilter {
       const day = parseInt(fullDate[2], 10)
       const year = parseInt(fullDate[3], 10)
       if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-        const start = new Date(year, month, day, 0, 0, 0, 0)
-        const end = new Date(year, month, day + 1, 0, 0, 0, 0)
-        const label = start.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        const start = fromZonedTime(new Date(year, month, day), JAKARTA_TZ)
+        const end = fromZonedTime(addDays(new Date(year, month, day), 1), JAKARTA_TZ)
+        const label = format(new Date(year, month, day), 'MMM d, yyyy')
         return { type: 'range', start, end, label }
       }
     }
@@ -117,12 +122,9 @@ export function parseDateFilter(args: string[]): DateFilter {
  *   "april 16 2026"      → single day April 16 2026
  */
 function parseNaturalDate(text: string): DateFilter | null {
-  const now = new Date()
-  const currentYear = now.getFullYear()
-
+  const currentYear = getYear(new Date())
   const tokens = text.split(/\s+/)
 
-  // Categorize each token
   const monthTokenIdx = tokens.findIndex((t) => MONTH_MAP[t] !== undefined)
   const yearTokenIdx = tokens.findIndex((t) => /^\d{4}$/.test(t))
   const dayTokenIdx = tokens.findIndex((t, i) => i !== yearTokenIdx && /^\d{1,2}$/.test(t))
@@ -134,17 +136,16 @@ function parseNaturalDate(text: string): DateFilter | null {
   const day = dayTokenIdx !== -1 ? parseInt(tokens[dayTokenIdx], 10) : null
 
   if (day !== null && day >= 1 && day <= 31) {
-    // Specific day
-    const start = new Date(year, month, day, 0, 0, 0, 0)
-    const end = new Date(year, month, day + 1, 0, 0, 0, 0)
-    const label = start.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const start = fromZonedTime(new Date(year, month, day), JAKARTA_TZ)
+    const end = fromZonedTime(addDays(new Date(year, month, day), 1), JAKARTA_TZ)
+    const label = format(new Date(year, month, day), 'MMM d, yyyy')
     return { type: 'range', start, end, label }
   }
 
   // Month range
-  const start = new Date(year, month, 1, 0, 0, 0, 0)
-  const end = new Date(year, month + 1, 1, 0, 0, 0, 0)
-  const label = start.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  const start = fromZonedTime(new Date(year, month, 1), JAKARTA_TZ)
+  const end = fromZonedTime(addMonths(new Date(year, month, 1), 1), JAKARTA_TZ)
+  const label = format(new Date(year, month, 1), 'MMMM yyyy')
   return { type: 'range', start, end, label }
 }
 
@@ -154,25 +155,24 @@ export function dateFilterToRange(filter: DateFilter): { start: Date; end: Date;
     return { start: filter.start, end: filter.end, label: filter.label }
   }
 
-  const now = new Date()
+  const nowZoned = toZonedTime(new Date(), JAKARTA_TZ)
 
   switch (filter.period) {
     case 'today': {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0)
+      const start = fromZonedTime(startOfDay(nowZoned), JAKARTA_TZ)
+      const end = fromZonedTime(addDays(startOfDay(nowZoned), 1), JAKARTA_TZ)
       return { start, end, label: 'Today' }
     }
     case 'week': {
-      const start = new Date(now)
-      start.setDate(start.getDate() - 7)
-      start.setHours(0, 0, 0, 0)
-      return { start, end: now, label: 'Last 7 Days' }
+      const start = fromZonedTime(startOfDay(subDays(nowZoned, 7)), JAKARTA_TZ)
+      const end = fromZonedTime(addDays(startOfDay(nowZoned), 1), JAKARTA_TZ)
+      return { start, end, label: 'Last 7 Days' }
     }
     case 'month':
     default: {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0)
-      const label = now.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+      const start = fromZonedTime(startOfMonth(nowZoned), JAKARTA_TZ)
+      const end = fromZonedTime(addMonths(startOfMonth(nowZoned), 1), JAKARTA_TZ)
+      const label = formatInTimeZone(new Date(), JAKARTA_TZ, 'MMMM yyyy')
       return { start, end, label }
     }
   }

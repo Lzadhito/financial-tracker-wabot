@@ -1,3 +1,4 @@
+import { addDays, startOfDay, startOfMonth, startOfWeek, subDays, subMonths, format } from 'date-fns'
 import type { ParsedIntent, BotResponse } from '../types'
 import { strings } from '../../copy/strings'
 import {
@@ -12,11 +13,8 @@ function periodToDateFilter(period?: string): DateFilter {
     case 'today':
       return { type: 'period', period: 'today' }
     case 'yesterday': {
-      const y = new Date()
-      y.setDate(y.getDate() - 1)
-      y.setHours(0, 0, 0, 0)
-      const yEnd = new Date(y)
-      yEnd.setDate(yEnd.getDate() + 1)
+      const y = startOfDay(subDays(new Date(), 1))
+      const yEnd = addDays(y, 1)
       return {
         type: 'range',
         start: y,
@@ -27,23 +25,19 @@ function periodToDateFilter(period?: string): DateFilter {
     case 'this_week':
       return { type: 'period', period: 'week' }
     case 'last_week': {
-      const now = new Date()
-      const end = new Date(now)
-      end.setDate(end.getDate() - end.getDay()) // start of this week
-      end.setHours(0, 0, 0, 0)
-      const start = new Date(end)
-      start.setDate(start.getDate() - 7)
+      const end = startOfWeek(new Date())
+      const start = subDays(end, 7)
       return { type: 'range', start, end, label: 'Last week' }
     }
     case 'last_month': {
       const now = new Date()
-      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      const end = new Date(now.getFullYear(), now.getMonth(), 1)
+      const start = startOfMonth(subMonths(now, 1))
+      const end = startOfMonth(now)
       return {
         type: 'range',
         start,
         end,
-        label: start.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+        label: format(start, 'MMMM yyyy'),
       }
     }
     case 'this_month':

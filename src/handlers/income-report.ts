@@ -1,3 +1,4 @@
+import { formatInTimeZone } from 'date-fns-tz'
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import { getByTypeInRange, getTotalByTypeInRange } from '../services/transaction.service'
 import { sendTextReply } from '../whatsapp/sender'
@@ -46,7 +47,7 @@ export async function handleIncomeReport(
     replyText += `\n*Entries:*\n`
     const displayed = txns.slice(0, 10)
     for (const txn of displayed) {
-      const dateStr = txn.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+      const dateStr = formatInTimeZone(txn.createdAt, 'UTC', 'MMM d')
       const desc = txn.description || txn.category
       replyText += `• ${dateStr} | ${txn.memberName} | ${formatRupiah(txn.amount)} — ${desc}\n`
     }

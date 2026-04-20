@@ -1,3 +1,5 @@
+import { id } from 'date-fns/locale'
+import { formatInTimeZone } from 'date-fns-tz'
 import type { WASocket, WAMessage } from '@whiskeysockets/baileys'
 import { findTransactionsByNameAndTime, findTransactionsByName, softDeleteTransaction } from '../services/transaction.service'
 import { sendTextReply } from '../whatsapp/sender'
@@ -88,8 +90,8 @@ export async function handleDeleteTransaction(
 
     const typeEmoji = txn.transactionType === 'income' ? '📥' : '📤'
     const desc = txn.description || txn.rawMessage
-    const dateStr = txn.createdAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-    const timeStr = txn.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+    const dateStr = formatInTimeZone(txn.createdAt, 'UTC', 'd MMMM yyyy', { locale: id })
+    const timeStr = formatInTimeZone(txn.createdAt, 'UTC', 'HH:mm')
     await sendTextReply(
       sock,
       remoteJid,
@@ -129,8 +131,8 @@ export async function handleDeleteTransaction(
     if (matches.length > 1) {
       const list = matches
         .map((t, i) => {
-          const date = t.createdAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', timeZone: 'UTC' })
-          const time = t.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+          const date = formatInTimeZone(t.createdAt, 'UTC', 'd MMM', { locale: id })
+          const time = formatInTimeZone(t.createdAt, 'UTC', 'HH:mm')
           const desc = t.description || t.rawMessage
           return `${i + 1}. ${formatRupiah(t.amount)} — ${desc} (${date}, ${time})`
         })
@@ -156,13 +158,8 @@ export async function handleDeleteTransaction(
 
     const typeEmoji = txn.transactionType === 'income' ? '📥' : '📤'
     const desc = txn.description || txn.rawMessage
-    const dateStr = txn.createdAt.toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'UTC',
-    })
-    const timeStr = txn.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+    const dateStr = formatInTimeZone(txn.createdAt, 'UTC', 'd MMMM yyyy', { locale: id })
+    const timeStr = formatInTimeZone(txn.createdAt, 'UTC', 'HH:mm')
 
     await sendTextReply(
       sock,

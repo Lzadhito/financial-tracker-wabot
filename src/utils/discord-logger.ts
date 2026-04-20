@@ -1,3 +1,4 @@
+import { formatISO } from 'date-fns'
 import { env } from '../env'
 
 const MAX_LENGTH = 1900 // Discord embed description limit
@@ -23,7 +24,7 @@ async function sendToDiscord(level: 'ERROR' | 'WARN' | 'FATAL', message: string)
   if (!env.DISCORD_WEBHOOK_URL) return
 
   const color = level === 'FATAL' ? 0xff0000 : level === 'ERROR' ? 0xff4500 : 0xffa500
-  const now = new Date().toISOString()
+  const now = formatISO(new Date())
 
   const payload = {
     embeds: [

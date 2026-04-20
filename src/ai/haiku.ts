@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { subDays } from 'date-fns'
 import { env } from '../env'
 import { z } from 'zod'
 
@@ -89,8 +90,7 @@ export async function parseDeleteQueryWithOllama(rawText: string, today: Date): 
   const todayDay = today.getDate()
   const todayMonth = today.getMonth() + 1
   const todayYear = today.getFullYear()
-  const yesterday = new Date(today)
-  yesterday.setDate(today.getDate() - 1)
+  const yesterday = subDays(today, 1)
   const yesterdayDay = yesterday.getDate()
   const yesterdayMonth = yesterday.getMonth() + 1
   const startTime = Date.now()
