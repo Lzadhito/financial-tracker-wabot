@@ -155,23 +155,28 @@ export function dateFilterToRange(filter: DateFilter): { start: Date; end: Date;
     return { start: filter.start, end: filter.end, label: filter.label }
   }
 
+  // Use getUTC* on toZonedTime result — the pseudo-UTC value encodes Jakarta local time,
+  // so getUTC* gives Jakarta date components independent of system timezone.
   const nowZoned = toZonedTime(new Date(), JAKARTA_TZ)
+  const y = nowZoned.getUTCFullYear()
+  const mo = nowZoned.getUTCMonth()
+  const d = nowZoned.getUTCDate()
 
   switch (filter.period) {
     case 'today': {
-      const start = fromZonedTime(startOfDay(nowZoned), JAKARTA_TZ)
-      const end = fromZonedTime(addDays(startOfDay(nowZoned), 1), JAKARTA_TZ)
+      const start = fromZonedTime(new Date(Date.UTC(y, mo, d)), JAKARTA_TZ)
+      const end = fromZonedTime(new Date(Date.UTC(y, mo, d + 1)), JAKARTA_TZ)
       return { start, end, label: 'Today' }
     }
     case 'week': {
-      const start = fromZonedTime(startOfDay(subDays(nowZoned, 7)), JAKARTA_TZ)
-      const end = fromZonedTime(addDays(startOfDay(nowZoned), 1), JAKARTA_TZ)
+      const start = fromZonedTime(new Date(Date.UTC(y, mo, d - 7)), JAKARTA_TZ)
+      const end = fromZonedTime(new Date(Date.UTC(y, mo, d + 1)), JAKARTA_TZ)
       return { start, end, label: 'Last 7 Days' }
     }
     case 'month':
     default: {
-      const start = fromZonedTime(startOfMonth(nowZoned), JAKARTA_TZ)
-      const end = fromZonedTime(addMonths(startOfMonth(nowZoned), 1), JAKARTA_TZ)
+      const start = fromZonedTime(new Date(Date.UTC(y, mo, 1)), JAKARTA_TZ)
+      const end = fromZonedTime(new Date(Date.UTC(y, mo + 1, 1)), JAKARTA_TZ)
       const label = formatInTimeZone(new Date(), JAKARTA_TZ, 'MMMM yyyy')
       return { start, end, label }
     }
