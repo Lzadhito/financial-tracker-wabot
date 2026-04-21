@@ -55,6 +55,7 @@ export interface ParsedEntities {
   period?: Period
   description?: string
   items?: ExpenseItem[]
+  transactionDate?: string  // "yesterday", "2026-04-19", or period keyword
 }
 
 export interface ParsedIntent {

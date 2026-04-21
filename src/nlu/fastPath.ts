@@ -1,5 +1,5 @@
 import { normalizeAmount } from './indonesianNormalizer'
-import type { ParsedIntent, Category, ExpenseItem } from './types'
+import type { ParsedIntent, Category, ExpenseItem, Period } from './types'
 
 /**
  * Fast-path regex classifier.
@@ -96,6 +96,10 @@ const INCOME_SUFFIX_RE =
 // Comma-separated multi-expense: "coffee 50k, lunch 75k, dinner 100k"
 const MULTI_EXPENSE_RE = /(.+?)\s+((?:rp\.?\s*)?[\d.,]+\s*(?:rb|ribu|k|jt|juta)?)\s*(?:,|$)/gi
 
+// label amount yesterday: "coffee 50k yesterday", "kopi 50rb kemarin"
+const LABEL_AMOUNT_YESTERDAY_RE =
+  /^(.+?)\s+((?:rp\.?\s*)?[\d.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(yesterday|kemarin)$/i
+
 // ── Single-word triggers ────────────────────────────────────────────
 
 const MENU_TRIGGERS = new Set([
@@ -121,13 +125,34 @@ const SHOW_TRANSACTIONS_TRIGGERS = new Set([
 
 const BUDGET_RE = /^(?:budget|anggaran)(?:\s+set)?\s+((?:rp\.?\s*)?[\d.,]+\s*(?:rb|ribu|k|jt|juta)?)$/i
 
+const PERIOD_MAP: Record<string, Period> = {
+  'yesterday': 'yesterday', 'kemarin': 'yesterday',
+  'today': 'today', 'hari ini': 'today',
+  'this week': 'this_week', 'minggu ini': 'this_week',
+  'this month': 'this_month', 'bulan ini': 'this_month',
+}
+
+const YESTERDAY_KEYWORDS = new Set(['yesterday', 'kemarin'])
+
+// Month names — if found in desc, fall to Haiku for date parsing
+const MONTH_NAME_SET = new Set([
+  'january', 'february', 'march', 'april', 'june', 'july',
+  'august', 'september', 'october', 'november', 'december',
+  'jan', 'feb', 'mar', 'apr', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
+  // Indonesian
+  'januari', 'februari', 'maret', 'mei', 'juni', 'juli',
+  'agustus', 'oktober', 'desember',
+])
+
 export function fastPath(text: string): ParsedIntent | null {
   const trimmed = text.trim()
   if (!trimmed) return null
 
   const lower = trimmed.toLowerCase()
 
-  // ── Single-word triggers ────────────────────────────────────────
+  // ── Trigger words ────────────────────────────────────────────
+  const firstWord = lower.split(/\s+/)[0]
+
   if (MENU_TRIGGERS.has(lower)) {
     return {
       intent: 'show_menu',
@@ -137,24 +162,29 @@ export function fastPath(text: string): ParsedIntent | null {
     }
   }
 
-  if (REPORT_TRIGGERS.has(lower)) {
-    return {
-      intent: 'query_spending',
-      confidence: 0.9,
-      entities: { period: 'this_month' },
-      source: 'fast_path',
+  if (REPORT_TRIGGERS.has(firstWord)) {
+    const rest = lower.slice(firstWord.length).trim()
+    if (!rest) {
+      return { intent: 'query_spending', confidence: 0.9, entities: { period: 'this_month' }, source: 'fast_path' }
     }
+    const period = PERIOD_MAP[rest]
+    if (period) {
+      return { intent: 'query_spending', confidence: 0.9, entities: { period }, source: 'fast_path' }
+    }
+    return null // complex date → Haiku
   }
 
   // Check for show_transactions triggers (must come before amount regex)
-  const firstWord = lower.split(/\s+/)[0]
   if (SHOW_TRANSACTIONS_TRIGGERS.has(firstWord)) {
-    return {
-      intent: 'show_transactions',
-      confidence: 0.9,
-      entities: {},
-      source: 'fast_path',
+    const rest = lower.slice(firstWord.length).trim()
+    if (!rest) {
+      return { intent: 'show_transactions', confidence: 0.9, entities: {}, source: 'fast_path' }
     }
+    const period = PERIOD_MAP[rest]
+    if (period) {
+      return { intent: 'show_transactions', confidence: 0.9, entities: { period }, source: 'fast_path' }
+    }
+    return null // complex date → Haiku
   }
 
   if (UNDO_TRIGGERS.has(lower)) {
@@ -194,14 +224,23 @@ export function fastPath(text: string): ParsedIntent | null {
   if (incomeMatch) {
     const amount = normalizeAmount(incomeMatch[1])
     if (amount !== null && amount > 0) {
+      const rawDesc = incomeMatch[2]?.trim() || ''
+      if (rawDesc) {
+        const descWords = rawDesc.split(/\s+/)
+        const lastWord = descWords[descWords.length - 1].toLowerCase()
+        if (YESTERDAY_KEYWORDS.has(lastWord)) {
+          const cleanDesc = descWords.slice(0, -1).join(' ')
+          return {
+            intent: 'add_income', confidence: 0.9,
+            entities: { amount, description: cleanDesc || undefined, category: 'other', transactionDate: 'yesterday' },
+            source: 'fast_path',
+          }
+        }
+      }
       return {
         intent: 'add_income',
         confidence: 0.9,
-        entities: {
-          amount,
-          description: incomeMatch[2]?.trim() || undefined,
-          category: 'other',
-        },
+        entities: { amount, description: rawDesc || undefined, category: 'other' },
         source: 'fast_path',
       }
     }
@@ -226,14 +265,24 @@ export function fastPath(text: string): ParsedIntent | null {
     const amount = normalizeAmount(addMatch[1])
     if (amount !== null && amount > 0) {
       const desc = addMatch[2].trim()
+      const descWords = desc.split(/\s+/)
+      const lastWord = descWords[descWords.length - 1].toLowerCase()
+      if (YESTERDAY_KEYWORDS.has(lastWord)) {
+        const cleanDesc = descWords.slice(0, -1).join(' ')
+        return {
+          intent: 'add_expense', confidence: 0.95,
+          entities: { amount, description: cleanDesc || undefined, category: guessCategory(cleanDesc), transactionDate: 'yesterday' },
+          source: 'fast_path',
+        }
+      }
+      // Desc contains a month name → specific date → Haiku handles
+      if (descWords.some((w) => MONTH_NAME_SET.has(w.toLowerCase()))) {
+        return null
+      }
       return {
         intent: 'add_expense',
         confidence: 0.95,
-        entities: {
-          amount,
-          description: desc,
-          category: guessCategory(desc),
-        },
+        entities: { amount, description: desc, category: guessCategory(desc) },
         source: 'fast_path',
       }
     }
@@ -277,15 +326,55 @@ export function fastPath(text: string): ParsedIntent | null {
       if (/^(berapa|how|what|total|apa|kapan|when|where|why)$/i.test(desc)) {
         return null // ambiguous — let Haiku handle
       }
+      // Guard: bare numbers ≤ 31 with no shorthand are likely day numbers, not amounts
+      const hasShorthand = /rb|ribu|k|jt|juta|rp/i.test(prefixMatch[1])
+      if (!hasShorthand && amount <= 31) {
+        return null // e.g. "19 april beli kopi 20rb" — "19" is a date, not amount
+      }
+      // Skip if desc starts with a command trigger word
+      const prefixDescFirstWord = desc.split(/\s+/)[0].toLowerCase()
+      if (MENU_TRIGGERS.has(prefixDescFirstWord) || REPORT_TRIGGERS.has(prefixDescFirstWord)
+          || SHOW_TRANSACTIONS_TRIGGERS.has(prefixDescFirstWord)) {
+        return null
+      }
+      // Yesterday detection
+      const prefixDescWords = desc.split(/\s+/)
+      const prefixLastWord = prefixDescWords[prefixDescWords.length - 1].toLowerCase()
+      if (YESTERDAY_KEYWORDS.has(prefixLastWord)) {
+        const cleanDesc = prefixDescWords.slice(0, -1).join(' ')
+        return {
+          intent: 'add_expense', confidence: 0.85,
+          entities: { amount, description: cleanDesc || undefined, category: guessCategory(cleanDesc), transactionDate: 'yesterday' },
+          source: 'fast_path',
+        }
+      }
+      // Desc contains a month name → specific date → Haiku handles
+      if (prefixDescWords.some((w) => MONTH_NAME_SET.has(w.toLowerCase()))) {
+        return null
+      }
       return {
         intent: 'add_expense',
         confidence: 0.85,
-        entities: {
-          amount,
-          description: desc,
-          category: guessCategory(desc),
-        },
+        entities: { amount, description: desc, category: guessCategory(desc) },
         source: 'fast_path',
+      }
+    }
+  }
+
+  // ── Label + amount + yesterday: "coffee 50k yesterday" ──────────
+  const ladMatch = trimmed.match(LABEL_AMOUNT_YESTERDAY_RE)
+  if (ladMatch) {
+    const amount = normalizeAmount(ladMatch[2])
+    if (amount !== null && amount > 0) {
+      const desc = ladMatch[1].trim()
+      const descFirstWord = desc.toLowerCase().split(/\s+/)[0]
+      if (!MENU_TRIGGERS.has(descFirstWord) && !REPORT_TRIGGERS.has(descFirstWord)
+          && !SHOW_TRANSACTIONS_TRIGGERS.has(descFirstWord)) {
+        return {
+          intent: 'add_expense', confidence: 0.85,
+          entities: { amount, description: desc, category: guessCategory(desc), transactionDate: 'yesterday' },
+          source: 'fast_path',
+        }
       }
     }
   }
@@ -294,21 +383,40 @@ export function fastPath(text: string): ParsedIntent | null {
   const suffixMatch = trimmed.match(AMOUNT_SUFFIX_RE)
   if (suffixMatch) {
     const amountStr = suffixMatch[2]
+    // Guard: 4-digit years (1990-2100) are not amounts
+    if (/^\d{4}$/.test(amountStr.trim())) {
+      const yr = parseInt(amountStr.trim())
+      if (yr >= 1990 && yr <= 2100) return null
+    }
     const amount = normalizeAmount(amountStr)
     if (amount !== null && amount > 0) {
       const desc = suffixMatch[1].trim()
-      // Skip if the "label" is a trigger word
-      if (MENU_TRIGGERS.has(desc.toLowerCase()) || REPORT_TRIGGERS.has(desc.toLowerCase())) {
+      // Skip if desc starts with a command trigger word
+      const descFirstWord = desc.toLowerCase().split(/\s+/)[0]
+      if (MENU_TRIGGERS.has(descFirstWord) || REPORT_TRIGGERS.has(descFirstWord)
+          || SHOW_TRANSACTIONS_TRIGGERS.has(descFirstWord) || UNDO_TRIGGERS.has(descFirstWord)
+          || DELETE_TRIGGERS.has(descFirstWord)) {
+        return null
+      }
+      // Yesterday detection
+      const suffixDescWords = desc.split(/\s+/)
+      const suffixLastWord = suffixDescWords[suffixDescWords.length - 1].toLowerCase()
+      if (YESTERDAY_KEYWORDS.has(suffixLastWord)) {
+        const cleanDesc = suffixDescWords.slice(0, -1).join(' ')
+        return {
+          intent: 'add_expense', confidence: 0.85,
+          entities: { amount, description: cleanDesc || undefined, category: guessCategory(cleanDesc), transactionDate: 'yesterday' },
+          source: 'fast_path',
+        }
+      }
+      // Desc contains a month name → specific date → Haiku handles
+      if (suffixDescWords.some((w) => MONTH_NAME_SET.has(w.toLowerCase()))) {
         return null
       }
       return {
         intent: 'add_expense',
         confidence: 0.85,
-        entities: {
-          amount,
-          description: desc,
-          category: guessCategory(desc),
-        },
+        entities: { amount, description: desc, category: guessCategory(desc) },
         source: 'fast_path',
       }
     }

@@ -6,7 +6,7 @@ import {
   getTotalByTypeInRange,
 } from '../../services/transaction.service'
 import { getLedgerById } from '../../services/ledger.service'
-import { dateFilterToRange, type DateFilter } from '../../utils/date-filter'
+import { dateFilterToRange, parseDateFilter, type DateFilter } from '../../utils/date-filter'
 
 function periodToDateFilter(period?: string): DateFilter {
   switch (period) {
@@ -41,8 +41,23 @@ function periodToDateFilter(period?: string): DateFilter {
       }
     }
     case 'this_month':
-    default:
       return { type: 'period', period: 'month' }
+    default: {
+      if (period) {
+        // ISO date from Haiku: "2026-04-19"
+        const isoMatch = period.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (isoMatch) {
+          const m = parseInt(isoMatch[2])
+          const d = parseInt(isoMatch[3])
+          const y = parseInt(isoMatch[1])
+          return parseDateFilter([`${m}/${d}/${y}`])
+        }
+        // Natural language from Haiku: "april 2026", "19 april 2026"
+        const natural = parseDateFilter(period.split(/\s+/))
+        if (natural.type === 'range') return natural
+      }
+      return { type: 'period', period: 'month' }
+    }
   }
 }
 

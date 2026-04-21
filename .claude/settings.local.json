@@ -15,7 +15,9 @@
       "Bash(bun --version)",
       "Bash(grep -E \"error TS|^$\")",
       "Bash(npx tsc *)",
-      "Bash(npx -p typescript tsc --noEmit)"
+      "Bash(npx -p typescript tsc --noEmit)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(bun tsc *)"
     ]
   }
 }

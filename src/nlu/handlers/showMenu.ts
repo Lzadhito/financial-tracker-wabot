@@ -1,16 +1,42 @@
 import type { BotResponse } from '../types'
-import { strings } from '../../copy/strings'
 
 export async function handleShowMenu(): Promise<BotResponse> {
-  const menuText = `${strings.greetings.menu()}
+  const menuText = `📋 *What I can do:*
 
-Examples:
-• *Log expense*: "coffee 50k" or "lunch 35000 at Kopi Kenangan"
-• *View spending*: "report" or "spending this month"
-• *Check balance*: "budget" or "how much left"
-• *List today*: "show" or "list"
-• *Set budget*: "budget 2jt"
-• *Undo*: reply "undo" within 5 min of logging`
+💰 *Log Expenses* (natural language)
+• \`coffee 50k\` or \`50rb kopi\`
+• \`spent 75k groceries\`
+• \`lunch 35k, coffee 15k\` _(multiple)_
+• \`coffee 50k yesterday\` _(backdate)_
+
+📥 *Log Income*
+• \`income 5jt salary\`
+• \`gaji 5000000\`
+
+📊 *View Summary*
+• \`summary\` or \`report\`
+• \`summary yesterday\`
+• \`summary this week\`
+• \`summary this month\`
+
+📋 *List Transactions*
+• \`list\` or \`show\`
+• \`list yesterday\`
+• \`list this week\`
+• \`list this month\`
+
+🎯 *Budget & Income Target*
+• \`budget 2jt\`
+• \`/set-income 5jt\`
+
+↶ *Undo / Delete*
+• \`undo\` _(within 5 min)_
+• \`/delete beli kopi 16 april\`
+
+⚙️ *Slash Commands*
+/summary · /transactions · /income · /budget · /delete · /help
+
+💡 Tip: Just type naturally — I understand Indonesian & English!`
 
   return { text: menuText }
 }

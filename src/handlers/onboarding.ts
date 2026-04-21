@@ -39,15 +39,25 @@ export async function handleGroupOnboarding(
     })
 
     const replyText =
-      `👋 Hi everyone! I'm your financial tracker.\n\n` +
-      `*How to use:*\n` +
-      `• Mention me: @FinanceBot spent 50k lunch\n` +
-      `• I'll log expenses, calculate totals, and track budgets\n\n` +
-      `*First steps:*\n` +
-      `• @FinanceBot /income 5000000 (set group income)\n` +
-      `• @FinanceBot /budget 2000000 (set monthly budget)\n` +
-      `• @FinanceBot /help (see all commands)\n\n` +
-      `Ready? Try: @FinanceBot spent 50k lunch`
+      `👋 Hi everyone! I'm your group finance tracker.\n\n` +
+      `*Quick start — just mention me:*\n` +
+      `• @FinanceBot lunch 50k\n` +
+      `• @FinanceBot income 5jt salary\n` +
+      `• @FinanceBot summary\n` +
+      `• @FinanceBot list\n\n` +
+      `*I understand natural language in Indonesian & English:*\n` +
+      `• "kopi 15rb" ✓\n` +
+      `• "spent 75k groceries" ✓\n` +
+      `• "gaji 5jt" ✓\n` +
+      `• "coffee 50k yesterday" ✓\n\n` +
+      `*Set up your budget:*\n` +
+      `• @FinanceBot /budget 2000000\n` +
+      `• @FinanceBot /set-income 5000000\n\n` +
+      `*Tips for accuracy:*\n` +
+      `• Include the amount: "50k" or "50rb" or "50000"\n` +
+      `• Add a description: "lunch 50k" not just "50k"\n` +
+      `• Say "undo" within 5 min if something's wrong\n\n` +
+      `Type @FinanceBot menu anytime for full command list.`
 
     await sendTextReply(sock, remoteJid, replyText, msg)
 
@@ -77,16 +87,23 @@ export async function handleDMOnboarding(
 
     const replyText =
       `👋 Hi! I'm your personal finance tracker.\n\n` +
-      `*How to use:*\n` +
-      `• Send: spent 50k lunch\n` +
-      `• Send: income 5M salary\n` +
-      `• I'll track all your expenses\n\n` +
-      `*Commands:*\n` +
-      `• /summary (this month)\n` +
-      `• /budget 2000000 (set monthly budget)\n` +
-      `• /income 5000000 (set monthly income)\n` +
-      `• /help (all commands)\n\n` +
-      `Ready? Try: spent 50k lunch`
+      `*Quick start — just type naturally:*\n` +
+      `• lunch 50k\n` +
+      `• income 5jt salary\n` +
+      `• summary\n` +
+      `• list\n\n` +
+      `*I understand Indonesian & English:*\n` +
+      `• "kopi 15rb" ✓\n` +
+      `• "spent 75k groceries" ✓\n` +
+      `• "coffee 50k yesterday" ✓\n\n` +
+      `*Set up your budget:*\n` +
+      `• /budget 2000000\n` +
+      `• /set-income 5000000\n\n` +
+      `*Tips:*\n` +
+      `• Include the amount: "50k" or "50rb" or "50000"\n` +
+      `• Add a description: "lunch 50k" not just "50k"\n` +
+      `• Say "undo" within 5 min if something's wrong\n\n` +
+      `Type "menu" anytime for full command list.`
 
     await sendTextReply(sock, remoteJid, replyText, msg)
 

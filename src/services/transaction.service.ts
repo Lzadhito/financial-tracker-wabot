@@ -12,6 +12,7 @@ export async function recordTransaction(data: {
   messageId: string
   rawMessage: string
   aiParsedData: unknown
+  createdAt?: Date
 }) {
   const [created] = await db
     .insert(transactions)
@@ -25,6 +26,7 @@ export async function recordTransaction(data: {
       messageId: data.messageId,
       rawMessage: data.rawMessage,
       aiParsedData: data.aiParsedData as any,
+      ...(data.createdAt !== undefined ? { createdAt: data.createdAt } : {}),
     })
     .returning()
 

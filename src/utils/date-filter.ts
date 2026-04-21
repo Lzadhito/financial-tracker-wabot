@@ -4,7 +4,7 @@ import { fromZonedTime, toZonedTime, formatInTimeZone } from 'date-fns-tz'
 const JAKARTA_TZ = 'Asia/Jakarta'
 
 export type DateFilter =
-  | { type: 'period'; period: 'today' | 'week' | 'month' }
+  | { type: 'period'; period: 'today' | 'yesterday' | 'week' | 'month' }
   | { type: 'range'; start: Date; end: Date; label: string }
 
 const MONTH_MAP: Record<string, number> = {
@@ -20,6 +20,19 @@ const MONTH_MAP: Record<string, number> = {
   october: 9, oct: 9,
   november: 10, nov: 10,
   december: 11, dec: 11,
+  // Indonesian
+  januari: 0,
+  februari: 1,
+  maret: 2,
+  // april same as English
+  mei: 4,
+  juni: 5,
+  juli: 6,
+  agustus: 7,
+  // september same as English
+  oktober: 9,
+  // november same as English
+  desember: 11,
 }
 
 const MONTH_NAMES_SET = new Set(Object.keys(MONTH_MAP))
@@ -30,7 +43,7 @@ const MONTH_NAMES_SET = new Set(Object.keys(MONTH_MAP))
  */
 export function looksLikeDateArg(arg: string): boolean {
   const lower = arg.trim().toLowerCase()
-  if (['today', 'week', 'month'].includes(lower)) return true
+  if (['today', 'yesterday', 'week', 'month'].includes(lower)) return true
   if (MONTH_NAMES_SET.has(lower)) return true
   if (/^\d{4}$/.test(lower)) return true         // YYYY
   if (/^\d{1,2}\/\d{4}$/.test(lower)) return true   // MM/YYYY
@@ -63,8 +76,27 @@ export function parseDateFilter(args: string[]): DateFilter {
   const raw = args[0].trim().toLowerCase()
 
   if (raw === 'today') return { type: 'period', period: 'today' }
+  if (raw === 'yesterday') return { type: 'period', period: 'yesterday' }
   if (raw === 'week') return { type: 'period', period: 'week' }
   if (raw === 'month') return { type: 'period', period: 'month' }
+
+  // Try ISO YYYY-MM-DD (single arg from Haiku)
+  if (args.length === 1 && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-').map(Number)
+    const start = fromZonedTime(new Date(y, m - 1, d), JAKARTA_TZ)
+    const end = fromZonedTime(addDays(new Date(y, m - 1, d), 1), JAKARTA_TZ)
+    const label = format(new Date(y, m - 1, d), 'MMM d, yyyy')
+    return { type: 'range', start, end, label }
+  }
+
+  // Try ISO YYYY-MM (single arg from Haiku)
+  if (args.length === 1 && /^\d{4}-\d{2}$/.test(raw)) {
+    const [y, m] = raw.split('-').map(Number)
+    const start = fromZonedTime(new Date(y, m - 1, 1), JAKARTA_TZ)
+    const end = fromZonedTime(addMonths(new Date(y, m - 1, 1), 1), JAKARTA_TZ)
+    const label = format(new Date(y, m - 1, 1), 'MMMM yyyy')
+    return { type: 'range', start, end, label }
+  }
 
   // Try YYYY (4-digit year only, single arg)
   if (args.length === 1 && /^\d{4}$/.test(raw)) {
@@ -167,6 +199,11 @@ export function dateFilterToRange(filter: DateFilter): { start: Date; end: Date;
       const start = fromZonedTime(new Date(Date.UTC(y, mo, d)), JAKARTA_TZ)
       const end = fromZonedTime(new Date(Date.UTC(y, mo, d + 1)), JAKARTA_TZ)
       return { start, end, label: 'Today' }
+    }
+    case 'yesterday': {
+      const start = fromZonedTime(new Date(Date.UTC(y, mo, d - 1)), JAKARTA_TZ)
+      const end = fromZonedTime(new Date(Date.UTC(y, mo, d)), JAKARTA_TZ)
+      return { start, end, label: 'Yesterday' }
     }
     case 'week': {
       const start = fromZonedTime(new Date(Date.UTC(y, mo, d - 7)), JAKARTA_TZ)

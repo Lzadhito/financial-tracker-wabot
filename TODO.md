@@ -1,154 +1,365 @@
-# TODO: Improvement Plan
+ Plan: List/Summary Date Filters, Date-Specific Transactions, Bug Fix, Onboarding                                                                                
+                                                        
+ Context
 
-> Catatan: Dokumen ini berisi task improvement yang harus dieksekusi satu per satu. Setiap task memiliki konteks, langkah teknis, dan acceptance criteria yang jelas.
+ WhatsApp financial tracker bot needs several features and a critical bug fix. Currently:
+ - list/show NLU only shows today's transactions (hardcoded)
+ - summary via NLU only works as single-word trigger → defaults to this_month
+ - "summary 19 april 2026" gets misclassified as add_expense (amount=2026, desc="summary 19 april") due to AMOUNT_SUFFIX_RE regex greedily matching
+ - Expenses/income always record with createdAt = now() — no backdating support
+ - Onboarding and help messages are minimal
 
----
+ Bug Fix: "summary 19 april 2026" → expense
 
-## Out of scope — NLU refactor
+ Root cause: In src/nlu/fastPath.ts, AMOUNT_SUFFIX_RE ^(.+?)\s+(amount_pattern)$ matches "summary 19 april 2026" as label="summary 19 april", amount="2026". The
+  guard at line 301 only checks exact match against REPORT_TRIGGERS/MENU_TRIGGERS sets, so "summary 19 april" doesn't match "summary".
 
-The following items are deliberately deferred. Do not implement without owner approval.
+ Fix in src/nlu/fastPath.ts:
+ - In the AMOUNT_SUFFIX_RE handler (around line 294-315), change the guard to check if desc's first word is in any command trigger set (MENU_TRIGGERS,
+ REPORT_TRIGGERS, SHOW_TRANSACTIONS_TRIGGERS, UNDO_TRIGGERS, DELETE_TRIGGERS):
+ const descFirstWord = desc.toLowerCase().split(/\s+/)[0]
+ if (MENU_TRIGGERS.has(descFirstWord) || REPORT_TRIGGERS.has(descFirstWord)
+     || SHOW_TRANSACTIONS_TRIGGERS.has(descFirstWord) || UNDO_TRIGGERS.has(descFirstWord)
+     || DELETE_TRIGGERS.has(descFirstWord)) {
+   return null  // let Haiku or other fast-path patterns handle
+ }
+ - Apply same guard in AMOUNT_PREFIX_RE handler (line 270-291) — check if remainder starts with a command word
 
-- Voice note transcription
-- Receipt photo OCR
-- Baileys ban contingency / Cloud API migration path
-- Bahasa Indonesia output toggle
-- Scheduled/future-dated entries (beyond "log for today" fallback)
-- Cross-group analytics (one user's view across all their groups)
-- Multi-instance deployment (session store assumes single instance unless repo already solves this)
+ ---
+ Feature 1: List with date filters (specific date, yesterday, this week, this month)
 
----
+ Goal: list yesterday, list this week, list this month, list 19 april, list april 2026
 
-## Task 1: Fix Sales Invoice Date Picker — Allow Single Day Selection
+ 1a. Extend fast path (src/nlu/fastPath.ts)
 
-**Priority:** Tinggi (quick win)  
-**Effort:** Kecil  
-**Dependency:** Tidak ada
+ Currently lines 149-158 catch SHOW_TRANSACTIONS_TRIGGERS as first word and return immediately with no entities. Change to:
 
-### Konteks
-Saat ini, date picker pada halaman Sales Invoice tidak mengizinkan user memilih rentang 1 hari (misal 30 Maret - 30 Maret). User harus bisa filter transaksi untuk satu hari tertentu saja.
+ - After detecting first word is a show trigger, extract remaining text as date args
+ - Add a helper parseInlineDateToFilter(text: string): DateFilter | null that handles:
+   - "yesterday" / "kemarin" → { type: 'period', period: 'yesterday' } (need to add 'yesterday' to DateFilter period union)
+   - "today" / "hari ini" → { type: 'period', period: 'today' }
+   - "this week" / "minggu ini" → { type: 'period', period: 'week' }
+   - "this month" / "bulan ini" → { type: 'period', period: 'month' }
+   - Natural dates like "19 april", "april 2026" → delegate to parseDateFilter(args.split(' '))
+ - Return show_transactions intent with a new dateFilter entity (or encode period)
 
-### Langkah Teknis
-1. **Backend/API:** Pastikan query filter tanggal mendukung `start_date == end_date`. Gunakan `WHERE date >= start_date AND date < start_date + 1 day` atau `BETWEEN start_date 00:00:00 AND end_date 23:59:59`.
-2. **Frontend:** Hapus validasi yang menghalangi `start_date == end_date` pada date picker component. Pastikan user bisa klik tanggal yang sama untuk start dan end.
+ Wait — better approach: Don't add dateFilter to ParsedEntities. Instead:
+ - Add 'yesterday' to the DateFilter period union type in src/utils/date-filter.ts
+ - Encode the date as period entity in ParsedEntities (extend Period type to include 'yesterday')
+ - For specific dates, pass through Haiku (the fast path should return null for complex date parsing)
 
-### Acceptance Criteria
-- [ ] User bisa memilih tanggal yang sama untuk start date dan end date
-- [ ] Hasil filter menampilkan semua transaksi pada hari tersebut
-- [ ] Tidak ada error atau validasi yang menghalangi
+ Simpler approach for fast path:
+ if (SHOW_TRANSACTIONS_TRIGGERS.has(firstWord)) {
+   const rest = lower.slice(firstWord.length).trim()
+   if (!rest) {
+     // No date arg → default today
+     return { intent: 'show_transactions', confidence: 0.9, entities: {}, source: 'fast_path' }
+   }
+   // Check known period keywords
+   const periodMap: Record<string, Period> = {
+     'yesterday': 'yesterday', 'kemarin': 'yesterday',
+     'today': 'today', 'hari ini': 'today',
+     'this week': 'this_week', 'minggu ini': 'this_week',
+     'this month': 'this_month', 'bulan ini': 'this_month',
+   }
+   const period = periodMap[rest]
+   if (period) {
+     return { intent: 'show_transactions', confidence: 0.9, entities: { period }, source: 'fast_path' }
+   }
+   // For specific dates like "19 april", fall through to Haiku
+   return null
+ }
 
----
+ 1b. Update NLU prompt (src/nlu/prompts.ts)
 
-## Task 2: Customer Harus Terhubung dengan Warehouse
+ Add to show_transactions intent description:
+ - show_transactions — list/view transactions with optional date filter ("list yesterday", "show this week", "list 19 april")
 
-**Priority:** Tinggi  
-**Effort:** Sedang  
-**Dependency:** Tidak ada
+ 1c. Extend handleShowTransactions (src/nlu/handlers/showTransactions.ts)
 
-### Konteks
-Setiap Customer harus memiliki relasi ke satu Warehouse. Ini diperlukan agar saat membuat Sales Order, sistem tahu warehouse mana yang dipakai.
+ Currently: handleShowTransactions(ledgerId) → only today via getTodayTransactions.
 
-### Langkah Teknis
-1. **Database Migration:** Tambahkan kolom `warehouse_id` (foreign key ke tabel warehouse) pada tabel `customers`. Bisa nullable dulu untuk backward compatibility.
-2. **Backend/API:**
-   - Update endpoint create/update Customer untuk menerima dan menyimpan `warehouse_id`.
-   - Tambahkan validasi: `warehouse_id` harus merujuk ke warehouse yang valid.
-   - Update endpoint GET Customer untuk menyertakan data warehouse (join/include).
-3. **Frontend:**
-   - Tambahkan dropdown/select "Warehouse" pada form Create/Edit Customer.
-   - Tampilkan nama warehouse pada list dan detail Customer.
-4. **Data Migration:** Untuk customer yang sudah ada, assign warehouse default atau biarkan null lalu minta user mengisi manual.
+ Change signature to: handleShowTransactions(ledgerId, parsed: ParsedIntent)
 
-### Acceptance Criteria
-- [ ] Tabel customer memiliki kolom `warehouse_id` (FK)
-- [ ] Form Customer memiliki field untuk memilih warehouse
-- [ ] API create/update Customer menyimpan `warehouse_id`
-- [ ] Detail/list Customer menampilkan warehouse terkait
+ Inside:
+ - Use parsed.entities.period to determine date filter
+ - Use periodToDateFilter() (from querySpending.ts — extract to shared util or import) to convert period → DateFilter
+ - Use dateFilterToRange() + getTransactionsWithUserInRange() for the query
+ - Build response text similar to current format but with correct label
 
----
+ 1d. Update router (src/router/message-router.ts)
 
-## Task 3: Sales Order Harus Menampilkan dan Menyimpan Warehouse
+ In routeNluMessage switch case for show_transactions:
+ case 'show_transactions':
+   response = await handleShowTransactions(ledgerId, parsed)
+   break
 
-**Priority:** Tinggi  
-**Effort:** Sedang  
-**Dependency:** Task 2 harus selesai terlebih dahulu
+ 1e. Update DateFilter type (src/utils/date-filter.ts)
 
-### Konteks
-Saat membuat Sales Order, sistem harus tahu warehouse mana yang digunakan. Warehouse ini bisa di-auto-fill dari Customer yang dipilih (hasil dari Task 2), tapi juga bisa di-override manual jika diperlukan.
+ Add 'yesterday' to period union:
+ export type DateFilter =
+   | { type: 'period'; period: 'today' | 'yesterday' | 'week' | 'month' }
+   | { type: 'range'; start: Date; end: Date; label: string }
 
-### Langkah Teknis
-1. **Database Migration:** Tambahkan kolom `warehouse_id` (FK ke tabel warehouse) pada tabel `sales_orders`.
-2. **Backend/API:**
-   - Update endpoint create Sales Order untuk menerima `warehouse_id`.
-   - Saat customer dipilih, auto-suggest warehouse dari data customer (GET customer → warehouse_id).
-   - Validasi: `warehouse_id` wajib diisi.
-   - Stok yang dikurangi harus dari warehouse yang sesuai dengan `warehouse_id` pada Sales Order.
-3. **Frontend:**
-   - Tambahkan field "Warehouse" pada form Sales Order.
-   - Auto-fill warehouse saat customer dipilih (fetch dari relasi customer → warehouse).
-   - Izinkan user override warehouse secara manual.
-   - Tampilkan warehouse pada list dan detail Sales Order.
+ Add yesterday case to dateFilterToRange():
+ case 'yesterday': {
+   const start = fromZonedTime(new Date(Date.UTC(y, mo, d - 1)), JAKARTA_TZ)
+   const end = fromZonedTime(new Date(Date.UTC(y, mo, d)), JAKARTA_TZ)
+   return { start, end, label: 'Yesterday' }
+ }
 
-### Acceptance Criteria
-- [ ] Tabel sales_orders memiliki kolom `warehouse_id` (FK)
-- [ ] Form Sales Order memiliki field warehouse, auto-filled dari customer
-- [ ] Stok berkurang dari warehouse yang benar
-- [ ] Detail/list Sales Order menampilkan warehouse
+ ---
+ Feature 2: Summary with specific date
 
----
+ Goal: summary yesterday, summary 19 april, summary this week
 
-## Task 4: Bundling — Stok Produk Satuan Harus Ikut Berkurang
+ 2a. Extend fast path for summary/report triggers (src/nlu/fastPath.ts)
 
-**Priority:** Tinggi  
-**Effort:** Besar (paling kompleks)  
-**Dependency:** Tidak ada (tapi kerjakan terakhir karena kompleksitas)
+ Currently line 140-148 only catches exact single-word match. Change to check first word:
 
-### Konteks
-Saat ini, jika ada order untuk produk bundling, hanya stok bundle yang berkurang. Seharusnya, produk-produk satuan yang menjadi komponen bundle juga ikut berkurang.
+ if (REPORT_TRIGGERS.has(firstWord)) {
+   const rest = lower.slice(firstWord.length).trim()
+   if (!rest) {
+     return { intent: 'query_spending', confidence: 0.9, entities: { period: 'this_month' }, source: 'fast_path' }
+   }
+   // Check period keywords (same map as list)
+   const period = periodMap[rest]
+   if (period) {
+     return { intent: 'query_spending', confidence: 0.9, entities: { period }, source: 'fast_path' }
+   }
+   // Complex dates → fall to Haiku
+   return null
+ }
 
-**Contoh:**
-- Bundle "Paket A" terdiri dari: 1x Cherry + 1x Blossom
-- Order 3x "Paket A" → Cherry harus berkurang 3, Blossom harus berkurang 3
-- Jika Cherry atau Blossom stoknya tidak cukup, order harus ditolak
+ Move the REPORT_TRIGGERS check AFTER the single-word check but BEFORE amount regex patterns. Actually the current position at line 140 already checks
+ REPORT_TRIGGERS.has(lower) (exact full text). Change to check firstWord instead, then parse remaining args.
 
-### Langkah Teknis
-1. **Pastikan Data Model Bundle:** Pastikan ada tabel `bundle_items` (atau sejenisnya) yang menyimpan relasi:
-   - `bundle_id` → produk bundle
-   - `product_id` → produk satuan (komponen)
-   - `quantity` → jumlah produk satuan per 1 bundle
-2. **Backend — Logika Pengurangan Stok:**
-   Saat Sales Order dengan item bertipe bundle diproses/dikonfirmasi:
-   ```
-   for each order_item where product.type == 'bundle':
-     bundle_qty = order_item.quantity
-     bundle_components = get_bundle_items(order_item.product_id)
-     for each component in bundle_components:
-       reduce_stock(component.product_id, component.quantity * bundle_qty)
-   ```
-3. **Validasi Sebelum Approve:**
-   Sebelum mengkonfirmasi order, cek stok SEMUA komponen bundle:
-   ```
-   for each component in bundle_components:
-     if stock(component.product_id) < component.quantity * bundle_qty:
-       reject order with message "Stok {component.name} tidak cukup"
-   ```
-4. **Handle Pembatalan/Return:**
-   Jika order dibatalkan, kembalikan stok bundle + semua komponen satuan.
-5. **Frontend:** Tampilkan informasi komponen bundle pada detail order (opsional tapi disarankan).
+ 2b. handleQuerySpending already handles periods
 
-### Acceptance Criteria
-- [ ] Saat order bundle, stok produk satuan (komponen) ikut berkurang sesuai qty
-- [ ] Validasi stok komponen sebelum order dikonfirmasi
-- [ ] Jika stok komponen tidak cukup, order ditolak dengan pesan yang jelas
-- [ ] Pembatalan order mengembalikan stok bundle + stok komponen
-- [ ] (Opsional) Detail order menampilkan breakdown komponen bundle
+ The existing periodToDateFilter() in src/nlu/handlers/querySpending.ts already maps period strings to DateFilter. Just ensure it also handles 'yesterday' (it
+ already does at line 16).
 
----
+ For specific dates from Haiku (ISO range), need to handle that in periodToDateFilter or in the classify step.
 
-## Urutan Pengerjaan
+ ---
+ Feature 3: Add expense/income with specific date or yesterday
 
-```
-Task 1 (Date Picker Fix) → bisa langsung dikerjakan
-Task 2 (Customer ↔ Warehouse) → bisa langsung dikerjakan
-Task 3 (Warehouse di Sales Order) → setelah Task 2 selesai
-Task 4 (Bundling Stok Deduction) → bisa kapan saja, tapi kerjakan terakhir karena paling kompleks
-```
+ Goal: spent 50k lunch yesterday, income 5jt salary 19 april, coffee 50k kemarin
+
+ 3a. Add transactionDate to ParsedEntities (src/nlu/types.ts)
+
+ export interface ParsedEntities {
+   amount?: number
+   currency?: string
+   merchant?: string
+   category?: string
+   period?: Period
+   description?: string
+   items?: ExpenseItem[]
+   transactionDate?: string  // "yesterday", "2026-04-19", or period keyword
+ }
+
+ 3b. Update NLU prompt (src/nlu/prompts.ts)
+
+ Add to entities section:
+ - transactionDate: date for the transaction if explicitly stated ("yesterday", "kemarin", "19 april", "last tuesday"). Only set when user explicitly references
+  a past date for the expense/income. Do NOT set for the current day.
+
+ 3c. Update fast path (src/nlu/fastPath.ts)
+
+ For amount+label patterns, detect trailing date keywords:
+ - After matching expense pattern, check if description ends with a date keyword ("yesterday", "kemarin")
+ - Strip the date keyword from description, set transactionDate entity
+ - For complex dates ("19 april"), let Haiku handle (return null)
+
+ Example approach:
+ const YESTERDAY_KEYWORDS = new Set(['yesterday', 'kemarin'])
+
+ // In expense handlers, after extracting desc:
+ const descWords = desc.split(/\s+/)
+ const lastWord = descWords[descWords.length - 1].toLowerCase()
+ if (YESTERDAY_KEYWORDS.has(lastWord)) {
+   const cleanDesc = descWords.slice(0, -1).join(' ')
+   return {
+     intent: 'add_expense', confidence: 0.85,
+     entities: { amount, description: cleanDesc, category: guessCategory(cleanDesc), transactionDate: 'yesterday' },
+     source: 'fast_path'
+   }
+ }
+
+ 3d. Update recordTransaction (src/services/transaction.service.ts)
+
+ Add optional createdAt parameter:
+ export async function recordTransaction(data: {
+   // ...existing fields...
+   createdAt?: Date  // optional override for backdated entries
+ }) {
+   const [created] = await db.insert(transactions).values({
+     // ...existing fields...
+     createdAt: data.createdAt ?? new Date(),  // use override or default to now
+   }).returning()
+   return created
+ }
+
+ Note: The schema uses defaultNow() which only applies when no value is provided at insert time. Drizzle allows overriding it by passing a value explicitly.
+
+ 3e. Update addExpense handler (src/nlu/handlers/addExpense.ts)
+
+ - Import dateFilterToRange, date utilities
+ - After validating amount, check parsed.entities.transactionDate
+ - If "yesterday" → compute yesterday's date (midday Jakarta time to be safe)
+ - If ISO date → parse to Date
+ - Replace the isFutureDated check: if transactionDate is set AND in the future → reject
+ - Pass createdAt override to recordTransaction
+ - Update success message to indicate the date logged for
+
+ 3f. Update addIncome handler (src/nlu/handlers/addIncome.ts)
+
+ Same changes as addExpense.
+
+ ---
+ Feature 4: Command list in WA bot
+
+ Goal: Comprehensive command reference accessible via natural language
+
+ 4a. Update handleShowMenu (src/nlu/handlers/showMenu.ts)
+
+ Rewrite to include all available commands with examples:
+
+ const menuText = `📋 *What I can do:*
+
+ 💰 *Log Expenses* (natural language)
+ • \`coffee 50k\` or \`50rb kopi\`
+ • \`spent 75k groceries\`
+ • \`lunch 35k, coffee 15k\` _(multiple)_
+ • \`coffee 50k yesterday\` _(backdate)_
+
+ 📥 *Log Income*
+ • \`income 5jt salary\`
+ • \`gaji 5000000\`
+
+ 📊 *View Summary*
+ • \`summary\` or \`report\`
+ • \`summary yesterday\`
+ • \`summary this week\`
+ • \`summary april 2026\`
+
+ 📋 *List Transactions*
+ • \`list\` or \`show\`
+ • \`list yesterday\`
+ • \`list this week\`
+
+ 🎯 *Budget & Income Target*
+ • \`budget 2jt\`
+ • \`/set-income 5jt\`
+
+ ↶ *Undo / Delete*
+ • \`undo\` _(within 5 min)_
+ • \`/delete beli kopi 16 april\`
+
+ ⚙️  *Slash Commands*
+ /summary · /transactions · /income · /budget · /delete · /help
+
+ 💡 Tip: Just type naturally — I understand Indonesian & English!`
+
+ 4b. Update /help command (src/handlers/help.ts)
+
+ Add new date filter examples:
+ - /summary yesterday
+ - /summary 19 april 2026
+ - /transactions yesterday
+ - /transactions this week
+
+ Also add natural language section.
+
+ ---
+ Feature 5: Better onboarding
+
+ 5a. Update group onboarding (src/handlers/onboarding.ts)
+
+ Rewrite handleGroupOnboarding reply to:
+ 👋 Hi everyone! I'm your group finance tracker.
+
+ *Quick start — just mention me:*
+ • @FinanceBot lunch 50k
+ • @FinanceBot income 5jt salary
+ • @FinanceBot summary
+ • @FinanceBot list
+
+ *I understand natural language in Indonesian & English:*
+ • "kopi 15rb" ✓
+ • "spent 75k groceries" ✓
+ • "gaji 5jt" ✓
+
+ *Set up your budget:*
+ • @FinanceBot /budget 2000000
+ • @FinanceBot /set-income 5000000
+
+ *Tips for accuracy:*
+ • Include the amount: "50k" or "50rb" or "50000"
+ • Add a description: "lunch 50k" not just "50k"
+ • Say "undo" within 5 min if something's wrong
+
+ Type @FinanceBot menu anytime for full command list.
+
+ 5b. Update DM onboarding
+
+ Similar rewrite for personal/DM context (no @mention needed).
+
+ ---
+ Files to modify (in order)
+
+ ┌─────┬──────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────┐
+ │  #  │                 File                 │                                     Changes                                     │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 1   │ src/utils/date-filter.ts             │ Add 'yesterday' to DateFilter period union + dateFilterToRange case             │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 2   │ src/nlu/types.ts                     │ Add transactionDate?: string to ParsedEntities                                  │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 3   │ src/nlu/prompts.ts                   │ Update NLU_SYSTEM_PROMPT: show_transactions description, transactionDate entity │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 4   │ src/nlu/fastPath.ts                  │ Bug fix (AMOUNT_SUFFIX_RE guard), list+date, summary+date, expense+yesterday    │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 5   │ src/nlu/handlers/showTransactions.ts │ Accept ParsedIntent, use date filter, query by range                            │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 6   │ src/nlu/handlers/querySpending.ts    │ Ensure periodToDateFilter handles all cases (already mostly works)              │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 7   │ src/services/transaction.service.ts  │ Add optional createdAt param to recordTransaction                               │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 8   │ src/nlu/handlers/addExpense.ts       │ Handle transactionDate → compute createdAt override                             │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 9   │ src/nlu/handlers/addIncome.ts        │ Same as addExpense                                                              │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 10  │ src/nlu/handlers/showMenu.ts         │ Comprehensive command list                                                      │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 11  │ src/handlers/help.ts                 │ Add date filter examples, natural language section                              │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 12  │ src/handlers/onboarding.ts           │ Better onboarding with examples and tips                                        │
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+ │ 13  │ src/router/message-router.ts         │ Pass parsed to handleShowTransactions                                           │
+ └─────┴──────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘
+
+ Verification
+
+ 1. Bug fix test: Send "summary 19 april 2026" → should get query_spending summary for April 19, 2026 (not an expense of Rp 2,026)
+ 2. List dates: Send "list yesterday" → shows yesterday's transactions. "list this week" → last 7 days. "list 19 april" → specific day.
+ 3. Summary dates: Send "summary yesterday" → summary for yesterday. "summary april 2026" → April 2026 summary.
+ 4. Backdate expense: Send "coffee 50k yesterday" → expense logged with yesterday's createdAt. Verify with "list yesterday".
+ 5. Backdate income: Send "income 5jt salary yesterday" → income logged yesterday.
+ 6. Menu: Send "menu" → comprehensive command list with all features.
+ 7. Onboarding: Add bot to new group → informative intro with accuracy tips.
+ 8. Regression: Send "coffee 50k" → still logs normally as today's expense. "summary" alone → still shows this month.
+ ├─────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤                                
+ │ 13  │ src/router/message-router.ts         │ Pass parsed to handleShowTransactions                                           │
+ └─────┴──────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘
+
+ Verification               
+                                 
+ 1. Bug fix test: Send "summary 19 april 2026" → should get query_spending summary for April 19, 2026 (not an expense of Rp 2,026)
+ 2. List dates: Send "list yesterday" → shows yesterday's transactions. "list this week" → last 7 days. "list 19 april" → specific day.
+ 3. Summary dates: Send "summary yesterday" → summary for yesterday. "summary april 2026" → April 2026 summary.
+ 4. Backdate expense: Send "coffee 50k yesterday" → expense logged with yesterday's createdAt. Verify with "list yesterday".
+ 5. Backdate income: Send "income 5jt salary yesterday" → income logged yesterday.
+ 6. Menu: Send "menu" → comprehensive command list with all features.
+ 7. Onboarding: Add bot to new group → informative intro with accuracy tips.
+ 8. Regression: Send "coffee 50k" → still logs normally as today's expense. "summary" alone → still shows this month.

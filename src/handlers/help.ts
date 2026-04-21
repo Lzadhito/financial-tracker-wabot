@@ -18,11 +18,19 @@ export async function handleHelp(
   helpText += `*Log Transactions (natural language):*\n`
   helpText += `• spent 50k lunch\n`
   helpText += `• income 5M salary\n`
-  helpText += `• bought 75k groceries\n\n`
+  helpText += `• bought 75k groceries\n`
+  helpText += `• coffee 50k yesterday _(backdate)_\n`
+  helpText += `• income 5jt salary yesterday\n\n`
+
+  helpText += `*Natural language list/summary:*\n`
+  helpText += `• list — today's transactions\n`
+  helpText += `• list yesterday | this week | this month\n`
+  helpText += `• summary yesterday | this week | this month\n\n`
 
   helpText += `*Summaries:*\n`
   helpText += `• /summary — this month\n`
   helpText += `• /summary today | week | month\n`
+  helpText += `• /summary yesterday\n`
   helpText += `• /summary 04/2026 — specific month\n`
   helpText += `• /summary 04/16/2026 — specific day\n\n`
 
@@ -32,7 +40,7 @@ export async function handleHelp(
 
   helpText += `*Transaction List:*\n`
   helpText += `• /transactions — all this month\n`
-  helpText += `• /transactions today | week\n`
+  helpText += `• /transactions today | week | yesterday\n`
   helpText += `• /transactions 04/16/2026 — specific day\n\n`
 
   helpText += `*Delete a Transaction:*\n`

@@ -141,7 +141,7 @@ export async function routeNluMessage(
       break
 
     case 'show_transactions':
-      response = await handleShowTransactions(ledgerId)
+      response = await handleShowTransactions(ledgerId, parsed)
       break
 
     case 'export_report':

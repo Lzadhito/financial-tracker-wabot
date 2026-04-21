@@ -85,6 +85,7 @@ export async function classifyWithHaiku(
       if (typeof rawEntities.category === 'string') entities.category = rawEntities.category
       if (typeof rawEntities.period === 'string') entities.period = rawEntities.period as ParsedEntities['period']
       if (typeof rawEntities.description === 'string') entities.description = rawEntities.description
+      if (typeof rawEntities.transactionDate === 'string') entities.transactionDate = rawEntities.transactionDate
       if (Array.isArray(rawEntities.items)) {
         entities.items = rawEntities.items
           .filter(
@@ -101,6 +102,7 @@ export async function classifyWithHaiku(
       const clarification =
         typeof obj.clarification === 'string' ? obj.clarification : undefined
 
+      console.log('[NLU Haiku] parsed:', JSON.stringify({ intent, confidence, entities }))
       return {
         intent: confidence < 0.6 ? 'unclear' : intent,
         confidence,
