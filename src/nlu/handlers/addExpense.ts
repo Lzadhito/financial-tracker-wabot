@@ -117,7 +117,8 @@ export async function handleAddExpense(
       ) +
       (backdateLabel ? `\n📅 Logged for: ${backdateLabel}` : '') +
       `\n\nMonth total: ${strings.formatAmount(totalExpenses)}\n\n` +
-      `↶ Reply *undo* within 5 min to undo.`
+      `↶ Reply *undo* within 5 min to undo.` +
+      strings.success.polishingNotice()
 
     return { text }
   } catch (error) {
@@ -186,7 +187,8 @@ async function handleMultiExpense(
       `Total: ${strings.formatAmount(totalAmount)}\n` +
       `Logged by: ${loggerName}\n\n` +
       `Month total: ${strings.formatAmount(totalExpenses)}\n\n` +
-      `↶ Reply *undo* within 5 min to undo all.`
+      `↶ Reply *undo* within 5 min to undo all.` +
+      strings.success.polishingNotice()
 
     return { text }
   } catch (error) {

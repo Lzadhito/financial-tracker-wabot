@@ -98,7 +98,8 @@ export async function handleAddIncome(
         loggerName
       ) +
       (backdateLabel ? `\n📅 Logged for: ${backdateLabel}` : '') +
-      `\n\n↶ Reply *undo* within 5 min to undo.`
+      `\n\n↶ Reply *undo* within 5 min to undo.` +
+      strings.success.polishingNotice()
 
     return { text }
   } catch (error) {

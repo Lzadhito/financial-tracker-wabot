@@ -32,7 +32,7 @@ const BILLS_KEYWORDS = new Set([
 ])
 
 const SHOPPING_KEYWORDS = new Set([
-  'belanja', 'shopping', 'beli', 'buy', 'groceries', 'grocery',
+  'belanja', 'shopping', 'groceries', 'grocery',
   'supermarket', 'alfamart', 'indomaret', 'tokopedia', 'shopee',
   'lazada', 'blibli',
 ])

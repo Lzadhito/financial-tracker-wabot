@@ -136,6 +136,8 @@ export const strings = {
       )
     },
     undone: () => `↶ Transaction undone successfully.`,
+    polishingNotice: () =>
+      `\n\n_🔧 Sistem ini masih terus disempurnakan. Ada saran atau nemuin masalah? Kasih tahu admin ya!_ 🙏`,
     budgetSet: (amount: number) =>
       `✅ *Monthly budget set*\n\nBudget: ${formatAmountIDR(amount)}`,
     incomeSet: (amount: number) =>
